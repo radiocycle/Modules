@@ -45,3 +45,4 @@ class RandomAnimePicMod(loader.Module):
       await asyncio.sleep(5)
       
       await msg.delete()
+      
