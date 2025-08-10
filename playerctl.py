@@ -70,4 +70,3 @@ class PlayerCTLMod(loader.Module):
         )
 
         await utils.answer(message, text)
-    

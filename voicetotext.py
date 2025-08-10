@@ -66,4 +66,4 @@ class VoiceToTextMod(loader.Module):
         finally:
             os.remove(media_file)
             os.remove(wav_file)
-            
+                

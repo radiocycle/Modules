@@ -32,4 +32,4 @@ class NeofetchMod(loader.Module):
             
         except FileNotFoundError:
             await utils.answer(message, self.strings("not_installed"))
-            
+        
