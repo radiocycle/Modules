@@ -1,9 +1,7 @@
-# meta developer: bio.kezuhiro.fun
+# meta developer: @cachedfiles
 
 from .. import loader, utils
 import asyncio
-import os
-import requests
 
 @loader.tds
 class PlayerCTLMod(loader.Module):
