@@ -6,7 +6,7 @@ import asyncio
 @loader.tds
 class PlayerCTLMod(loader.Module):
     """Управление музыкой через playerctl. Только для Linux."""
-    strings_ru = {
+    strings = {
         "name": "PlayerCTL",
         "no_player": "<b>Нет доступного плеера</b>",
         "now_playing": (
