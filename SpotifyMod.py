@@ -289,28 +289,3 @@ class SpotifyMod(loader.Module):
             )
 
         await utils.answer(message, result)
-
-    async def watcher(self, message: Message):
-        """Watcher is used to update token"""
-        if not self.sp:
-            return
-
-        if self.get("NextRefresh", False):
-            ttc = self.get("NextRefresh", 0)
-            crnt = time.time()
-            if ttc < crnt:
-                self.set(
-                    "acs_tkn",
-                    self.sp_auth.refresh_access_token(
-                        self.get("acs_tkn")["refresh_token"]
-                    ),
-                )
-                self.set("NextRefresh", time.time() + 45 * 60)
-                self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
-        else:
-            self.set(
-                "acs_tkn",
-                self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
-            )
-            self.set("NextRefresh", time.time() + 45 * 60)
-            self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
