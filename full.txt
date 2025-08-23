@@ -1,6 +1,6 @@
-neofetch
+Neofetch
 playerctl
 randomanimepic
-spotifymod
-unbanall
+SpotifyMod
+UnbanAll
 voicetotext
