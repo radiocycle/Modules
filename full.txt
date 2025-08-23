@@ -1,0 +1,6 @@
+neofetch
+playerctl
+randomanimepic
+spotifymod
+unbalall
+voicetotext
