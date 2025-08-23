@@ -2,5 +2,5 @@ neofetch
 playerctl
 randomanimepic
 spotifymod
-unbalall
+unbanall
 voicetotext
