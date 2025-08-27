@@ -32,10 +32,49 @@ logging.getLogger("spotipy").setLevel(logging.CRITICAL)
 
 @loader.tds
 class SpotifyMod(loader.Module):
-    """Карточка с играющим в данный момент треком на Spotify. Идея: t.me/fuccsoc. Реализация: t.me/hikariatama. Канал разработчика: t.me/hikarimods"""
+    """Card with the currently playing track on Spotify. Idea: t.me/fuccsoc. Implementation: t.me/hikariatama. Developer channel: t.me/hikarimods"""
 
     strings = {
         "name": "SpotifyMod",
+        "need_auth": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please execute"
+            " </b><code>.sauth</code><b> before performing this action.</b>"
+        ),
+        "err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred."
+            " Make sure music is playing!</b>\n<code>{}</code>"
+        ),
+        "already_authed": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Already authorized</b>"
+        ),
+        "authed": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Authentication"
+            " successful</b>"
+        ),
+        "deauth": (
+            "<emoji document_id=5877341274863832725>🚪</emoji> <b>Successfully logged out"
+            " of account</b>"
+        ),
+        "auth": (
+            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">Follow this'
+            " link</a>, allow access, then enter <code>.scode https://...</code> with"
+            " the link you received."
+        ),
+        "no_music": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>No music is playing!</b>"
+        ),
+        "currently_on": "Listening on",
+        "playlist": "Playlist",
+        "owner": "Owner",
+        "now_playing": "Now playing",
+        "artist": "Artist(s)",
+        "album": "Album",
+        "duration": "Duration",
+        "open_on_songlink": "Open on song.link",
+    }
+
+    strings_ru = {
+        "_cls_doc": "Карточка с играющим треком в Spotify. Идея: t.me/fuccsoc. Разработка: t.me/hikariatama. Канал разработчика: t.me/hikarimods",
         "need_auth": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Выполни"
             " </b><code>.sauth</code><b> перед выполнением этого действия.</b>"
@@ -66,6 +105,11 @@ class SpotifyMod(loader.Module):
         "currently_on": "Cлушаю на",
         "playlist": "Плейлист",
         "owner": "Владелец",
+        "now_playing": "Сейчас играет",
+        "artist": "Автор(ы)",
+        "album": "Альбом",
+        "duration": "Длительность",
+        "open_on_songlink": "Открыть на song.link",
     }
 
     def __init__(self):
@@ -130,8 +174,11 @@ class SpotifyMod(loader.Module):
 
 
     @error_handler
+    @loader.command(
+        ru_doc="- Получить ссылку для авторизации"
+    )
     async def sauthcmd(self, message: Message):
-        """- Получить ссылку для авторизации"""
+        """- Get authorization link"""
         if self.get("acs_tkn", False) and not self.sp:
             await utils.answer(message, self.strings("already_authed"))
         else:
@@ -142,8 +189,11 @@ class SpotifyMod(loader.Module):
             )
 
     @error_handler
+    @loader.command(
+        ru_doc="- Вставить код авторизации"
+    )
     async def scodecmd(self, message: Message):
-        """- Вставить код авторизации"""
+        """- Paste authorization code"""
         url = message.message.split(" ")[1]
         code = self.sp_auth.parse_auth_response_url(url)
         self.set("acs_tkn", self.sp_auth.get_access_token(code, True, False))
@@ -151,16 +201,22 @@ class SpotifyMod(loader.Module):
         await utils.answer(message, self.strings("authed"))
 
     @error_handler
+    @loader.command(
+        ru_doc="- Выйти из аккаунта"
+    )
     async def unauthcmd(self, message: Message):
-        """- Выйти из аккаунта"""
+        """- Log out of account"""
         self.set("acs_tkn", None)
         del self.sp
         await utils.answer(message, self.strings("deauth"))
 
     @error_handler
     @tokenized
+    @loader.command(
+        ru_doc="- Обновить токен авторизации"
+    )
     async def stokrefreshcmd(self, message: Message):
-        """- Сбросить токен авторизации"""
+        """- Refresh authorization token"""
         self.set(
             "acs_tkn",
             self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
@@ -171,8 +227,11 @@ class SpotifyMod(loader.Module):
 
     @error_handler
     @tokenized
+    @loader.command(
+        ru_doc="- 🎧 Показать карточку играющего трека"
+    )
     async def snowcmd(self, message: Message):
-        """- 🎧 Просмотреть карточку текущего трека."""
+        """- 🎧 View current track card."""
         current_playback = self.sp.current_playback()
 
         if not current_playback or not current_playback.get("is_playing", False):
@@ -180,18 +239,13 @@ class SpotifyMod(loader.Module):
             return
         
         try:
-            device_raw = (
-                current_playback["device"]["name"]
-                + " "
-                + current_playback["device"]["type"].lower()
-            )
-            device = device_raw.replace("computer", "").strip()
+            device = current_playback["device"]["name"]
         except Exception:
             device = None
 
         icon = (
             "<emoji document_id=5967816500415827773>💻</emoji>"
-            if "computer" in device_raw
+            if "computer" in device
             else "<emoji document_id=5872980989705196227>📱</emoji>"
         )
 
@@ -235,12 +289,12 @@ class SpotifyMod(loader.Module):
         )
         result += (
             (
-                "\n\n<emoji document_id=6007938409857815902>🎧</emoji> <b>Сейчас играет:</b>"
+                f"\n\n<emoji document_id=6007938409857815902>🎧</emoji> <b>{self.strings('now_playing')}:</b>"
                 f" <code>{utils.escape_html(track)}</code>"
-                f"\n<emoji document_id=5879770735999717115>👤</emoji> <b>Автор(ы):</b> <code>{utils.escape_html(', '.join(artists))}</code>"
+                f"\n<emoji document_id=5879770735999717115>👤</emoji> <b>{self.strings('artist')}:</b> <code>{utils.escape_html(', '.join(artists))}</code>"
                 if artists
                 else (
-                    "<emoji document_id=5870794890006237381>🎶</emoji> <b>Сейчас играет:</b>"
+                    f"<emoji document_id=5870794890006237381>🎶</emoji> <b>{self.strings('now_playing')}:</b>"
                     f" <code>{utils.escape_html(track)}</code>"
                 )
             )
@@ -248,7 +302,7 @@ class SpotifyMod(loader.Module):
             else ""
         )
         result += (
-            f"\n<emoji document_id=5870570722778156940>💿</emoji> <b>Альбом:</b>"
+            f"\n<emoji document_id=5870570722778156940>💿</emoji> <b>{self.strings('album')}:</b>"
             f" <code>{utils.escape_html(album_name)}</code>"
             if album_name
             else ""
@@ -261,7 +315,7 @@ class SpotifyMod(loader.Module):
             mins = current_second // 60
             secs = current_second % 60
             result += (
-                f"\n<emoji document_id=5872756762347573066>🕒</emoji> <b>Длительность:</b>"
+                f"\n<emoji document_id=5872756762347573066>🕒</emoji> <b>{self.strings('duration')}:</b>"
                 f" <code>{mins}:{secs:02}</code> / <code>{minutes}:{seconds:02}</code>"
             )
 
@@ -286,7 +340,7 @@ class SpotifyMod(loader.Module):
         )
         if universal_link:
             result += (
-                f'\n<emoji document_id=5877465816030515018>🔗</emoji> <b><a href="{universal_link}">Открыть на song.link</a></b>'
+                f'\n<emoji document_id=5877465816030515018>🔗</emoji> <b><a href="{universal_link}">{self.strings("open_on_songlink")}</a></b>'
             )
 
         await utils.answer(message, result)
