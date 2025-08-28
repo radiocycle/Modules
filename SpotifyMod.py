@@ -10,18 +10,22 @@
 # You CANNOT edit, distribute or redistribute this file without direct permission from the author.
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
-# meta developer: @cachedfiles
-# requires: telethon spotipy
+# meta developer: @cachedfiles, @kamekuro_hmods
+# requires: telethon spotipy pillow requests
 
 import asyncio
 import contextlib
 import functools
+import io
 import logging
+import textwrap
 import time
 import traceback
 from types import FunctionType
 
+import requests
 import spotipy
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from telethon.tl.types import Message
 
 from .. import loader, utils
@@ -32,7 +36,7 @@ logging.getLogger("spotipy").setLevel(logging.CRITICAL)
 
 @loader.tds
 class SpotifyMod(loader.Module):
-    """Card with the currently playing track on Spotify. Idea: t.me/fuccsoc. Implementation: t.me/hikariatama. Developer channel: t.me/hikarimods"""
+    """Card with the currently playing track on Spotify. Idea: t.me/fuccsoc. Implementation: t.me/hikariatama. Developer channel: t.me/hikarimods. Banners from YaMusic by @kamekuro_hmods"""
 
     strings = {
         "name": "SpotifyMod",
@@ -67,14 +71,14 @@ class SpotifyMod(loader.Module):
         "playlist": "Playlist",
         "owner": "Owner",
         "now_playing": "Now playing",
-        "artist": "Artist(s)",
         "album": "Album",
         "duration": "Duration",
         "open_on_songlink": "Open on song.link",
+        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
     }
 
     strings_ru = {
-        "_cls_doc": "Карточка с играющим треком в Spotify. Идея: t.me/fuccsoc. Разработка: t.me/hikariatama. Канал разработчика: t.me/hikarimods",
+        "_cls_doc": "Карточка с играющим треком в Spotify. Идея: t.me/fuccsoc. Разработка: t.me/hikariatama. Канал разработчика: t.me/hikarimods. Баннеры из YaMusic от @kamekuro_hmods",
         "need_auth": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Выполни"
             " </b><code>.sauth</code><b> перед выполнением этого действия.</b>"
@@ -106,10 +110,10 @@ class SpotifyMod(loader.Module):
         "playlist": "Плейлист",
         "owner": "Владелец",
         "now_playing": "Сейчас играет",
-        "artist": "Автор(ы)",
         "album": "Альбом",
         "duration": "Длительность",
         "open_on_songlink": "Открыть на song.link",
+        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Создание баннера...</i>",
     }
 
     def __init__(self):
@@ -172,6 +176,70 @@ class SpotifyMod(loader.Module):
 
         return wrapped
 
+    def _create_banner(
+        self,
+        title: str, artists: list,
+        duration: int, progress: int,
+        track_cover: bytes
+    ):
+        w, h = 1920, 768
+        title_font = ImageFont.truetype(io.BytesIO(requests.get(
+            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf"
+        ).content), 80)
+        art_font = ImageFont.truetype(io.BytesIO(requests.get(
+            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Regular.ttf"
+        ).content), 55)
+        time_font = ImageFont.truetype(io.BytesIO(requests.get(
+            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf"
+        ).content), 36)
+
+        track_cov = Image.open(io.BytesIO(track_cover)).convert("RGBA")
+        banner = track_cov.resize((w, w)).crop(
+            (0, (w-h)//2, w, ((w-h)//2)+h)
+        ).filter(ImageFilter.GaussianBlur(radius=14))
+        banner = ImageEnhance.Brightness(banner).enhance(0.3)
+
+        track_cov = track_cov.resize((banner.size[1]-150, banner.size[1]-150))
+        mask = Image.new("L", track_cov.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255)
+        track_cov.putalpha(mask)
+        track_cov = track_cov.crop(track_cov.getbbox())
+        banner.paste(track_cov, (75, 75), mask)
+
+        title_lines = textwrap.wrap(title, 23)
+        if len(title_lines) > 1:
+            title_lines[1] = title_lines[1] + "..." if len(title_lines) > 2 else title_lines[1]
+        title_lines = title_lines[:2]
+        artists_lines = textwrap.wrap(", ".join(artists), width=40)
+        if len(artists_lines) > 1:
+            for index, art in enumerate(artists_lines):
+                if "," in art[-2:]:
+                    artists_lines[index] = art[:art.rfind(",") - 1]
+
+        # Put title and artists to banner
+        draw = ImageDraw.Draw(banner)
+        x, y = 150+track_cov.size[0], 110
+        for index, line in enumerate(title_lines):
+            draw.text((x, y), line, font=title_font, fill="#FFFFFF")
+            if index != len(title_lines)-1:
+                y += 70
+        x, y = 150+track_cov.size[0], 110*2
+        if len(title_lines) > 1: y += 70
+        for index, line in enumerate(artists_lines):
+            draw.text((x, y), line, font=art_font, fill="#A0A0A0")
+            if index != len(artists_lines)-1:
+                y += 50
+
+        draw.rounded_rectangle([768, 650, 768+1072, 650+15], radius=15//2, fill="#A0A0A0")
+        if duration > 0:
+             draw.rounded_rectangle([768, 650, 768+int(1072*(progress/duration)), 650+15], radius=15//2, fill="#FFFFFF")
+        draw.text((768, 600), f"{(progress//1000//60):02}:{(progress//1000%60):02}", font=time_font, fill="#FFFFFF")
+        draw.text((1745, 600), f"{(duration//1000//60):02}:{(duration//1000%60):02}", font=time_font, fill="#FFFFFF")
+
+        by = io.BytesIO()
+        banner.save(by, format="PNG"); by.seek(0)
+        by.name = "banner.png"
+        return by
 
     @error_handler
     @loader.command(
@@ -267,15 +335,11 @@ class SpotifyMod(loader.Module):
             track = current_playback["item"]["name"]
             track_id = current_playback["item"]["id"]
             album_name = current_playback["item"]["album"].get("name", "Unknown Album")
+            cover_url = current_playback["item"]["album"]["images"][0]["url"]
         except Exception:
             await utils.answer(message, self.strings("no_music"))
             return
 
-        track_url = (
-            current_playback.get("item", {})
-            .get("external_urls", {})
-            .get("spotify", None)
-        )
         universal_link = f"https://song.link/s/{track_id}"
 
         artists = [
@@ -290,8 +354,7 @@ class SpotifyMod(loader.Module):
         result += (
             (
                 f"\n\n<emoji document_id=6007938409857815902>🎧</emoji> <b>{self.strings('now_playing')}:</b>"
-                f" <code>{utils.escape_html(track)}</code>"
-                f"\n<emoji document_id=5879770735999717115>👤</emoji> <b>{self.strings('artist')}:</b> <code>{utils.escape_html(', '.join(artists))}</code>"
+                f" <code>{utils.escape_html(track)} — {utils.escape_html(', '.join(artists))}</code>"
                 if artists
                 else (
                     f"<emoji document_id=5870794890006237381>🎶</emoji> <b>{self.strings('now_playing')}:</b>"
@@ -301,15 +364,13 @@ class SpotifyMod(loader.Module):
             if track
             else ""
         )
-        result += (
-            f"\n<emoji document_id=5870570722778156940>💿</emoji> <b>{self.strings('album')}:</b>"
-            f" <code>{utils.escape_html(album_name)}</code>"
-            if album_name
-            else ""
-        )
-        if "duration_ms" in current_playback["item"]:
-            duration = current_playback["item"]["duration_ms"] // 1000
-            current_second = current_playback.get("progress_ms", 0) // 1000
+        
+        duration_ms = current_playback["item"].get("duration_ms", 0)
+        progress_ms = current_playback.get("progress_ms", 0)
+        
+        if duration_ms:
+            duration = duration_ms // 1000
+            current_second = progress_ms // 1000
             minutes = duration // 60
             seconds = duration % 60
             mins = current_second // 60
@@ -340,10 +401,22 @@ class SpotifyMod(loader.Module):
         )
         if universal_link:
             result += (
-                f'\n<emoji document_id=5877465816030515018>🔗</emoji> <b><a href="{universal_link}">{self.strings("open_on_songlink")}</a></b>'
+                f'\n\n<emoji document_id=5877465816030515018>🔗</emoji> <b><a href="{universal_link}">{self.strings("open_on_songlink")}</a></b>'
             )
 
-        await utils.answer(message, result)
+        message = await utils.answer(message, result + self.strings("generating_banner"))
+
+        cover_bytes = await utils.run_sync(requests.get, cover_url)
+        banner_file = await utils.run_sync(
+            self._create_banner,
+            title=track,
+            artists=artists,
+            duration=duration_ms,
+            progress=progress_ms,
+            track_cover=cover_bytes.content
+        )
+        
+        await utils.answer(message, result, file=banner_file)
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
