@@ -124,8 +124,8 @@ class SpotifyMod(loader.Module):
             loader.ConfigValue(
                 "custom_text",
                 (
-                    "<b>🎵 Now playing:</b> {track} — {artists}\n"
-                    "<b>🌐 <a href='{songlink}'>song.link</a></b>"
+                    "<emoji document_id=6007938409857815902>🎧</emoji> <b>Now playing:</b> {track} — {artists}\n"
+                    "<emoji document_id=5877465816030515018>🔗</emoji> <b><a href='{songlink}'>song.link</a></b>"
                 ),
                 """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders""",
                 validator=loader.validators.String(),
