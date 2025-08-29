@@ -371,7 +371,7 @@ class SpotifyMod(loader.Module):
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
             cover_bytes = await utils.run_sync(requests.get, cover_url)
 
-            tmp_msg = await utils.answer(message, text + "\n\n" + {self.config["banner_gen_text"]})
+            tmp_msg = await utils.answer(message, text + f'\n\n{self.config["banner_gen_text"]}')
 
             banner_file = await utils.run_sync(
                 self._create_banner,
