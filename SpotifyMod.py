@@ -141,14 +141,15 @@ class SpotifyMod(loader.Module):
                 "custom_text",
                 (
                     "<b>🎵 Now playing:</b> {track} — {artists}\n"
-                    "<b>💿 Album:</b> {album}\n"
-                    "<b>📁 Playlist:</b> {playlist}\n"
-                    "<b>👤 Owner:</b> {playlist_owner}\n"
-                    "<b>🔗 Spotify:</b> {spotify_url}\n"
-                    "<b>🌐 Songlink:</b> {songlink}\n"
-                    "<b>🕒</b> {progress}/{duration}"
+                    "<b>🌐 <a href='{songlink}'>song.link</a></b>"
                 ),
-                "Custom text with placeholders",
+                """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration} placeholders""",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "banner_gen_text",
+                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>"
+                "Custom banner generation text",
                 validator=loader.validators.String(),
             ),
         )
@@ -369,6 +370,9 @@ class SpotifyMod(loader.Module):
         if self.config["show_banner"]:
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
             cover_bytes = await utils.run_sync(requests.get, cover_url)
+
+            tmp_msg = await utils.answer(message, text + "\n\n" + {self.config["banner_gen_text"]})
+
             banner_file = await utils.run_sync(
                 self._create_banner,
                 title=track,
@@ -377,9 +381,10 @@ class SpotifyMod(loader.Module):
                 progress=progress_ms,
                 track_cover=cover_bytes.content,
             )
-            await utils.answer(message, text, file=banner_file)
+            await utils.answer(tmp_msg, text, file=banner_file)
         else:
             await utils.answer(message, text)
+
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
