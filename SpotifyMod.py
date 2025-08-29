@@ -127,7 +127,7 @@ class SpotifyMod(loader.Module):
                     "<b>🎵 Now playing:</b> {track} — {artists}\n"
                     "<b>🌐 <a href='{songlink}'>song.link</a></b>"
                 ),
-                """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration} placeholders""",
+                """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders""",
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
