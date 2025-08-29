@@ -307,13 +307,18 @@ class SpotifyMod(loader.Module):
             return
         
         try:
-            device = current_playback["device"]["name"]
+            device_raw = (
+                current_playback["device"]["name"]
+                + " "
+                + current_playback["device"]["type"].lower()
+            )
+            device = device_raw.replace("computer", "").replace("smartphone", "").strip()
         except Exception:
             device = None
 
         icon = (
             "<emoji document_id=5967816500415827773>💻</emoji>"
-            if "computer" in device
+            if "computer" in device_raw
             else "<emoji document_id=5872980989705196227>📱</emoji>"
         )
 
