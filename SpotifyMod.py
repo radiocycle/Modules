@@ -10,7 +10,7 @@
 # You CANNOT edit, distribute or redistribute this file without direct permission from the author.
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
-# meta developer: @cachedfiles, @kamekuro_hmods
+# meta developer: @cachedfiles, @kamekuro_hmods, @extracli
 # requires: telethon spotipy pillow requests
 
 import asyncio
@@ -67,14 +67,6 @@ class SpotifyMod(loader.Module):
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>No music is playing!</b>"
         ),
-        "currently_on": "Listening on",
-        "playlist": "Playlist",
-        "owner": "Owner",
-        "now_playing": "Now playing",
-        "album": "Album",
-        "duration": "Duration",
-        "open_on_songlink": "Open on song.link",
-        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
     }
 
     strings_ru = {
@@ -106,14 +98,6 @@ class SpotifyMod(loader.Module):
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Музыка не играет!</b>"
         ),
-        "currently_on": "Cлушаю на",
-        "playlist": "Плейлист",
-        "owner": "Владелец",
-        "now_playing": "Сейчас играет",
-        "album": "Альбом",
-        "duration": "Длительность",
-        "open_on_songlink": "Открыть на song.link",
-        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Создание баннера...</i>",
     }
 
     def __init__(self):
@@ -129,6 +113,29 @@ class SpotifyMod(loader.Module):
             client_secret=self._client_secret,
             redirect_uri="https://thefsch.github.io/spotify/",
             scope=self.scope,
+        )
+        self.config = loader.ModuleConfig(
+            loader.ConfigValue(
+                "show_banner",
+                True,
+                "Show banner with track info",
+                validator=loader.validators.Boolean(),
+            ),
+            loader.ConfigValue(
+                "custom_text",
+                (
+                    "<b>🎵 Now playing:</b> {track} — {artists}\n"
+                    "<b>🌐 <a href='{songlink}'>song.link</a></b>"
+                ),
+                """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders""",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "banner_gen_text",
+                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
+                "Custom banner generation text",
+                validator=loader.validators.String(),
+            ),
         )
 
     async def client_ready(self, client, db):
@@ -216,7 +223,6 @@ class SpotifyMod(loader.Module):
                 if "," in art[-2:]:
                     artists_lines[index] = art[:art.rfind(",") - 1]
 
-        # Put title and artists to banner
         draw = ImageDraw.Draw(banner)
         x, y = 150+track_cov.size[0], 110
         for index, line in enumerate(title_lines):
@@ -301,11 +307,23 @@ class SpotifyMod(loader.Module):
     async def snowcmd(self, message: Message):
         """- 🎧 View current track card."""
         current_playback = self.sp.current_playback()
-
         if not current_playback or not current_playback.get("is_playing", False):
             await utils.answer(message, self.strings("no_music"))
             return
-        
+
+        track = current_playback["item"]["name"]
+        track_id = current_playback["item"]["id"]
+        artists = ", ".join([a["name"] for a in current_playback["item"]["artists"]])
+        album_name = current_playback["item"]["album"].get("name", "Unknown Album")
+        duration_ms = current_playback["item"].get("duration_ms", 0)
+        progress_ms = current_playback.get("progress_ms", 0)
+
+        duration = f"{duration_ms//1000//60}:{duration_ms//1000%60:02}"
+        progress = f"{progress_ms//1000//60}:{progress_ms//1000%60:02}"
+
+        spotify_url = f"https://open.spotify.com/track/{track_id}"
+        songlink = f"https://song.link/s/{track_id}"
+
         try:
             device_raw = (
                 current_playback["device"]["name"]
@@ -316,112 +334,52 @@ class SpotifyMod(loader.Module):
         except Exception:
             device = None
 
-        icon = (
-            "<emoji document_id=5967816500415827773>💻</emoji>"
-            if "computer" in device_raw
-            else "<emoji document_id=5872980989705196227>📱</emoji>"
-        )
-
         try:
             playlist_id = current_playback["context"]["uri"].split(":")[-1]
             playlist = self.sp.playlist(playlist_id)
             playlist_name = playlist.get("name", None)
             try:
                 playlist_owner = (
-                    f'<a href="https://open.spotify.com/user/{playlist["owner"]["id"]}">{playlist["owner"]["display_name"]}</a>'
+                    f'<a href="https://open.spotify.com/user/{playlist["owner"]["id"]}">'
+                    f'{playlist["owner"]["display_name"]}</a>'
                 )
             except KeyError:
-                playlist_owner = None
+                playlist_owner = playlist.get("owner", {}).get("display_name", "")
         except Exception:
-            playlist_name = None
-            playlist_owner = None
+            playlist_name = ""
+            playlist_owner = ""
 
-        try:
-            track = current_playback["item"]["name"]
-            track_id = current_playback["item"]["id"]
-            album_name = current_playback["item"]["album"].get("name", "Unknown Album")
+        text = self.config["custom_text"].format(
+            track=utils.escape_html(track),
+            artists=utils.escape_html(artists),
+            album=utils.escape_html(album_name),
+            duration=duration,
+            progress=progress,
+            device=device,
+            spotify_url=spotify_url,
+            songlink=songlink,
+            playlist=utils.escape_html(playlist_name) if playlist_name else "",
+            playlist_owner=playlist_owner or "",
+        )
+
+        if self.config["show_banner"]:
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
-        except Exception:
-            await utils.answer(message, self.strings("no_music"))
-            return
+            cover_bytes = await utils.run_sync(requests.get, cover_url)
 
-        universal_link = f"https://song.link/s/{track_id}"
+            tmp_msg = await utils.answer(message, text + f'\n\n{self.config["banner_gen_text"]}')
 
-        artists = [
-            artist["name"]
-            for artist in current_playback.get("item", {}).get("artists", [])
-            if "name" in artist
-        ]
-
-        result = (
-            "<emoji document_id=5294137402430858861>🎵</emoji> <b>SpotifyMod</b>"
-        )
-        result += (
-            (
-                f"\n\n<emoji document_id=6007938409857815902>🎧</emoji> <b>{self.strings('now_playing')}:</b>"
-                f" <code>{utils.escape_html(track)} — {utils.escape_html(', '.join(artists))}</code>"
-                if artists
-                else (
-                    f"<emoji document_id=5870794890006237381>🎶</emoji> <b>{self.strings('now_playing')}:</b>"
-                    f" <code>{utils.escape_html(track)}</code>"
-                )
+            banner_file = await utils.run_sync(
+                self._create_banner,
+                title=track,
+                artists=[a["name"] for a in current_playback["item"]["artists"]],
+                duration=duration_ms,
+                progress=progress_ms,
+                track_cover=cover_bytes.content,
             )
-            if track
-            else ""
-        )
-        
-        duration_ms = current_playback["item"].get("duration_ms", 0)
-        progress_ms = current_playback.get("progress_ms", 0)
-        
-        if duration_ms:
-            duration = duration_ms // 1000
-            current_second = progress_ms // 1000
-            minutes = duration // 60
-            seconds = duration % 60
-            mins = current_second // 60
-            secs = current_second % 60
-            result += (
-                f"\n<emoji document_id=5872756762347573066>🕒</emoji> <b>{self.strings('duration')}:</b>"
-                f" <code>{mins}:{secs:02}</code> / <code>{minutes}:{seconds:02}</code>"
-            )
+            await utils.answer(tmp_msg, text, file=banner_file)
+        else:
+            await utils.answer(message, text)
 
-        result += (
-            "\n\n<emoji document_id=5877307202888273539>📁</emoji>"
-            f" <b>{self.strings('playlist')}</b>: <a"
-            f' href="https://open.spotify.com/playlist/{playlist_id}">{playlist_name}</a>'
-            if playlist_name and playlist_id
-            else ""
-        )
-        result += (
-            "\n<emoji document_id=5879770735999717115>👤</emoji>"
-            f" <b>{self.strings('owner')}</b>: {playlist_owner}"
-            if playlist_owner
-            else ""
-        )
-        result += (
-            f"\n{icon} <b>{self.strings('currently_on')}</b>"
-            f" <code>{device}</code>"
-            if device
-            else ""
-        )
-        if universal_link:
-            result += (
-                f'\n\n<emoji document_id=5877465816030515018>🔗</emoji> <b><a href="{universal_link}">{self.strings("open_on_songlink")}</a></b>'
-            )
-
-        message = await utils.answer(message, result + self.strings("generating_banner"))
-
-        cover_bytes = await utils.run_sync(requests.get, cover_url)
-        banner_file = await utils.run_sync(
-            self._create_banner,
-            title=track,
-            artists=artists,
-            duration=duration_ms,
-            progress=progress_ms,
-            track_cover=cover_bytes.content
-        )
-        
-        await utils.answer(message, result, file=banner_file)
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
