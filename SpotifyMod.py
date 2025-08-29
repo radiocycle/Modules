@@ -10,7 +10,7 @@
 # You CANNOT edit, distribute or redistribute this file without direct permission from the author.
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
-# meta developer: @cachedfiles, @kamekuro_hmods
+# meta developer: @cachedfiles, @kamekuro_hmods, @extracli
 # requires: telethon spotipy pillow requests
 
 import asyncio
@@ -67,14 +67,6 @@ class SpotifyMod(loader.Module):
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>No music is playing!</b>"
         ),
-        "currently_on": "Listening on",
-        "playlist": "Playlist",
-        "owner": "Owner",
-        "now_playing": "Now playing",
-        "album": "Album",
-        "duration": "Duration",
-        "open_on_songlink": "Open on song.link",
-        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
     }
 
     strings_ru = {
@@ -106,14 +98,6 @@ class SpotifyMod(loader.Module):
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Музыка не играет!</b>"
         ),
-        "currently_on": "Cлушаю на",
-        "playlist": "Плейлист",
-        "owner": "Владелец",
-        "now_playing": "Сейчас играет",
-        "album": "Альбом",
-        "duration": "Длительность",
-        "open_on_songlink": "Открыть на song.link",
-        "generating_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Создание баннера...</i>",
     }
 
     def __init__(self):
@@ -148,7 +132,7 @@ class SpotifyMod(loader.Module):
             ),
             loader.ConfigValue(
                 "banner_gen_text",
-                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>"
+                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
                 "Custom banner generation text",
                 validator=loader.validators.String(),
             ),
@@ -341,6 +325,16 @@ class SpotifyMod(loader.Module):
         songlink = f"https://song.link/s/{track_id}"
 
         try:
+            device_raw = (
+                current_playback["device"]["name"]
+                + " "
+                + current_playback["device"]["type"].lower()
+            )
+            device = device_raw.replace("computer", "").replace("smartphone", "").strip()
+        except Exception:
+            device = None
+
+        try:
             playlist_id = current_playback["context"]["uri"].split(":")[-1]
             playlist = self.sp.playlist(playlist_id)
             playlist_name = playlist.get("name", None)
@@ -361,6 +355,7 @@ class SpotifyMod(loader.Module):
             album=utils.escape_html(album_name),
             duration=duration,
             progress=progress,
+            device=device,
             spotify_url=spotify_url,
             songlink=songlink,
             playlist=utils.escape_html(playlist_name) if playlist_name else "",
