@@ -46,7 +46,7 @@ class SpotifyMod(loader.Module):
         ),
         "err": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred."
-            " Make sure music is playing!</b>\n<code>{}</code>"
+            "</b>\n<code>{}</code>"
         ),
         "already_authed": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Already authorized</b>"
@@ -67,6 +67,10 @@ class SpotifyMod(loader.Module):
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>No music is playing!</b>"
         ),
+        "dl_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Failed to download"
+            " track.</b>"
+        ),
     }
 
     strings_ru = {
@@ -77,7 +81,7 @@ class SpotifyMod(loader.Module):
         ),
         "err": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Произошла ошибка."
-            " Убедитесь, что музыка играет!</b>\n<code>{}</code>"
+            "</b>\n<code>{}</code>"
         ),
         "already_authed": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Уже авторизован</b>"
@@ -97,6 +101,10 @@ class SpotifyMod(loader.Module):
         ),
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Музыка не играет!</b>"
+        ),
+        "dl_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Не удалось скачать"
+            " трек.</b>"
         ),
     }
 
@@ -137,6 +145,12 @@ class SpotifyMod(loader.Module):
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
+                "download_track_text",
+                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
+                "Custom download text for snowt",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
                 "title_font",
                 "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
                 "Custom font for title. Specify URL to .ttf file",
@@ -168,6 +182,11 @@ class SpotifyMod(loader.Module):
 
         with contextlib.suppress(Exception):
             await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
+
+        self.musicdl = await self.import_lib(
+            "https://github.com/Rilliat/modules/raw/refs/heads/master/musicdl.py",
+            suspend_on_error=True,
+        )
 
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
@@ -264,6 +283,17 @@ class SpotifyMod(loader.Module):
         banner.save(by, format="PNG"); by.seek(0)
         by.name = "banner.png"
         return by
+    
+    async def _open_track(self, item, msg, text):
+        track = item["name"]
+        artists = ", ".join([a["name"] for a in item["artists"]])
+        query = f"{track} - {artists}"
+        try:
+            music = await self.musicdl.dl(query, only_document=True)
+            await utils.answer(msg, text, file=music)
+        except Exception as e:
+            logger.error(f"MusicDL error: {e}")
+            await utils.answer(msg, self.strings("dl_err"))
 
     @error_handler
     @loader.command(
@@ -398,6 +428,71 @@ class SpotifyMod(loader.Module):
         else:
             await utils.answer(message, text)
 
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🎧 Скачать играющий трек"
+    )
+    async def snowtcmd(self, message: Message):
+        """- 🎧 Download current track."""
+        current_playback = self.sp.current_playback()
+        if not current_playback or not current_playback.get("is_playing", False):
+            await utils.answer(message, self.strings("no_music"))
+            return
+
+        track = current_playback["item"]["name"]
+        track_id = current_playback["item"]["id"]
+        artists = ", ".join([a["name"] for a in current_playback["item"]["artists"]])
+        album_name = current_playback["item"]["album"].get("name", "Unknown Album")
+        duration_ms = current_playback["item"].get("duration_ms", 0)
+        progress_ms = current_playback.get("progress_ms", 0)
+
+        duration = f"{duration_ms//1000//60}:{duration_ms//1000%60:02}"
+        progress = f"{progress_ms//1000//60}:{progress_ms//1000%60:02}"
+
+        spotify_url = f"https://open.spotify.com/track/{track_id}"
+        songlink = f"https://song.link/s/{track_id}"
+
+        try:
+            device_raw = (
+                current_playback["device"]["name"]
+                + " "
+                + current_playback["device"]["type"].lower()
+            )
+            device = device_raw.replace("computer", "").replace("smartphone", "").strip()
+        except Exception:
+            device = None
+
+        try:
+            playlist_id = current_playback["context"]["uri"].split(":")[-1]
+            playlist = self.sp.playlist(playlist_id)
+            playlist_name = playlist.get("name", None)
+            try:
+                playlist_owner = (
+                    f'<a href="https://open.spotify.com/user/{playlist["owner"]["id"]}">'
+                    f'{playlist["owner"]["display_name"]}</a>'
+                )
+            except KeyError:
+                playlist_owner = playlist.get("owner", {}).get("display_name", "")
+        except Exception:
+            playlist_name = ""
+            playlist_owner = ""
+
+        text = self.config["custom_text"].format(
+            track=utils.escape_html(track),
+            artists=utils.escape_html(artists),
+            album=utils.escape_html(album_name),
+            duration=duration,
+            progress=progress,
+            device=device,
+            spotify_url=spotify_url,
+            songlink=songlink,
+            playlist=utils.escape_html(playlist_name) if playlist_name else "",
+            playlist_owner=playlist_owner or "",
+        )
+
+        msg = await utils.answer(message, text + f'\n\n{self.config["download_track_text"]}')
+        await self._open_track(current_playback["item"], msg, text)
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
