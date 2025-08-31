@@ -184,7 +184,7 @@ class SpotifyMod(loader.Module):
             await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
 
         with contextlib.suppress(Exception):
-            await utils.dnd(client, "@Buddy_musicbot", archive=True)
+            await utils.dnd(client, "@LosslessRobot", archive=True)
 
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
@@ -284,7 +284,7 @@ class SpotifyMod(loader.Module):
 
     async def _dl_track(self, client, track, artists):
         query = f"{track} - {artists}"
-        async with client.conversation("@Buddy_musicbot") as conv:
+        async with client.conversation("@LosslessRobot") as conv:
             await conv.send_message(query)
             response = await conv.get_response()
             candidate_pos = None
