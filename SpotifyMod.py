@@ -136,6 +136,24 @@ class SpotifyMod(loader.Module):
                 "Custom banner generation text",
                 validator=loader.validators.String(),
             ),
+            loader.ConfigValue(
+                "title_font",
+                "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
+                "Custom font for title. Specify URL to .ttf file",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "artists_font",
+                "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Regular.ttf",
+                "Custom font for artists. Specify URL to .ttf file",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "time_font",
+                "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
+                "Custom font for time. Specify URL to .ttf file",
+                validator=loader.validators.String(),
+            ),
         )
 
     async def client_ready(self, client, db):
@@ -191,13 +209,13 @@ class SpotifyMod(loader.Module):
     ):
         w, h = 1920, 768
         title_font = ImageFont.truetype(io.BytesIO(requests.get(
-            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf"
+            self.config["title_font"]
         ).content), 80)
         art_font = ImageFont.truetype(io.BytesIO(requests.get(
-            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Regular.ttf"
+            self.config["artists_font"]
         ).content), 55)
         time_font = ImageFont.truetype(io.BytesIO(requests.get(
-            "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf"
+            self.config["time_font"]
         ).content), 36)
 
         track_cov = Image.open(io.BytesIO(track_cover)).convert("RGBA")
