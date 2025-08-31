@@ -183,10 +183,8 @@ class SpotifyMod(loader.Module):
         with contextlib.suppress(Exception):
             await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
 
-        self.musicdl = await self.import_lib(
-            "https://github.com/Rilliat/modules/raw/refs/heads/master/musicdl.py",
-            suspend_on_error=True,
-        )
+        with contextlib.suppress(Exception):
+            await utils.dnd(client, "@Buddy_musicbot", archive=True)
 
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
@@ -283,17 +281,28 @@ class SpotifyMod(loader.Module):
         banner.save(by, format="PNG"); by.seek(0)
         by.name = "banner.png"
         return by
-    
-    async def _open_track(self, item, msg, text):
-        track = item["name"]
-        artists = ", ".join([a["name"] for a in item["artists"]])
+
+    async def _dl_track(self, client, track, artists):
         query = f"{track} - {artists}"
-        try:
-            music = await self.musicdl.dl(query, only_document=True)
-            await utils.answer(msg, text, file=music)
-        except Exception as e:
-            logger.error(f"MusicDL error: {e}")
-            await utils.answer(msg, self.strings("dl_err"))
+        async with client.conversation("@Buddy_musicbot") as conv:
+            await conv.send_message(query)
+            response = await conv.get_response()
+            candidate_pos = None
+            if response.buttons:
+                for i, row in enumerate(response.buttons):
+                    for j, button in enumerate(row):
+                        if track.lower() in button.text.lower():
+                            candidate_pos = (i, j)
+                            break
+                    if candidate_pos:
+                        break
+                if candidate_pos is None:
+                    candidate_pos = (0, 0)
+                await response.click(*candidate_pos)
+                track_msg = await conv.get_response()
+                return track_msg
+            return None
+
 
     @error_handler
     @loader.command(
@@ -441,7 +450,6 @@ class SpotifyMod(loader.Module):
             return
 
         track = current_playback["item"]["name"]
-        track_id = current_playback["item"]["id"]
         artists = ", ".join([a["name"] for a in current_playback["item"]["artists"]])
         album_name = current_playback["item"]["album"].get("name", "Unknown Album")
         duration_ms = current_playback["item"].get("duration_ms", 0)
@@ -450,8 +458,8 @@ class SpotifyMod(loader.Module):
         duration = f"{duration_ms//1000//60}:{duration_ms//1000%60:02}"
         progress = f"{progress_ms//1000//60}:{progress_ms//1000%60:02}"
 
-        spotify_url = f"https://open.spotify.com/track/{track_id}"
-        songlink = f"https://song.link/s/{track_id}"
+        spotify_url = f"https://open.spotify.com/track/{current_playback['item']['id']}"
+        songlink = f"https://song.link/s/{current_playback['item']['id']}"
 
         try:
             device_raw = (
@@ -492,7 +500,11 @@ class SpotifyMod(loader.Module):
         )
 
         msg = await utils.answer(message, text + f'\n\n{self.config["download_track_text"]}')
-        await self._open_track(current_playback["item"], msg, text)
+        track_msg = await self._dl_track(message.client, track, artists)
+        if track_msg and track_msg.media:
+            await utils.answer(msg, text, file=track_msg.media)
+        else:
+            await utils.answer(msg, self.strings("dl_err"))
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
