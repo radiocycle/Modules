@@ -44,6 +44,35 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Please execute"
             " </b><code>.sauth</code><b> before performing this action.</b>"
         ),
+        "on-repeat": (
+            "<emoji document_id=5258420634785947640>🔄</emoji> <b>Set on-repeat.</b>"
+        ),
+        "off-repeat": (
+            "<emoji document_id=5260687119092817530>🔄</emoji> <b>Stopped track"
+            " repeat.</b>"
+        ),
+        "skipped": (
+            "<emoji document_id=6037622221625626773>➡️</emoji> <b>Skipped track.</b>"
+        ),
+        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>Playing...</b>",
+        "back": (
+            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>Switched to previous"
+            " track</b>"
+        ),
+        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>Pause</b>",
+        "restarted": (
+            "<emoji document_id=5843596438373667352>✅️</emoji> <b>Playing track"
+            " from the"
+            " beginning</b>"
+        ),
+        "liked": (
+            "<emoji document_id=5258179403652801593>❤️</emoji> <b>Liked current"
+            " playback</b>"
+        ),
+        "unlike": (
+            "<emoji document_id=5774077015388852135>❌</emoji>"
+            " <b>Unliked current playback</b>"
+        ),
         "err": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred."
             "</b>\n<code>{}</code>"
@@ -83,28 +112,46 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Произошла ошибка."
             "</b>\n<code>{}</code>"
         ),
+        "on-repeat": (
+            "<emoji document_id=5258420634785947640>🔄</emoji> <b>Включен повтор трека.</b>"
+        ),
+        "off-repeat": (
+            "<emoji document_id=5260687119092817530>🔄</emoji> <b>Повтор трека отключён.</b>"
+        ),
+        "skipped": (
+            "<emoji document_id=6037622221625626773>➡️</emoji> <b>Трек пропущен.</b>"
+        ),
+        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>Играет...</b>",
+        "back": (
+            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>Переключено на предыдущий трек</b>"
+        ),
+        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>Пауза</b>",
+        "restarted": (
+            "<emoji document_id=5843596438373667352>✅️</emoji> <b>Воспроизведение трека с начала...</b>"
+        ),
+        "liked": (
+            "<emoji document_id=5258179403652801593>❤️</emoji> <b>Текущий трек добавлен в избранное</b>"
+        ),
+        "unlike": (
+            "<emoji document_id=5774077015388852135>❌</emoji> <b>Убрал лайк с текущего трека</b>"
+        ),
         "already_authed": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Уже авторизован</b>"
         ),
         "authed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Успешная"
-            " аутентификация</b>"
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Успешная аутентификация</b>"
         ),
         "deauth": (
-            "<emoji document_id=5877341274863832725>🚪</emoji> <b>Успешный выход из"
-            " аккаунта</b>"
+            "<emoji document_id=5877341274863832725>🚪</emoji> <b>Успешный выход из аккаунта</b>"
         ),
         "auth": (
-            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">Пройдите по этой'
-            " ссылке</a>, разрешите вход, затем введите <code>.scode https://...</code> с"
-            " ссылкой которую вы получили."
+            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">Пройдите по этой ссылке</a>, разрешите вход, затем введите <code>.scode https://...</code> с ссылкой которую вы получили.'
         ),
         "no_music": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Музыка не играет!</b>"
         ),
         "dl_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Не удалось скачать"
-            " трек.</b>"
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Не удалось скачать трек.</b>"
         ),
     }
 
@@ -303,6 +350,97 @@ class SpotifyMod(loader.Module):
                 return track_msg
             return None
 
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 💫 Включить повтор трека"
+    )
+    async def srepeatcmd(self, message: Message):
+        """💫 Repeat"""
+        self.sp.repeat("track")
+        await utils.answer(message, self.strings("on-repeat"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ✋ Остановить повтор"
+    )
+    async def sderepeatcmd(self, message: Message):
+        """✋ Stop repeat"""
+        self.sp.repeat("context")
+        await utils.answer(message, self.strings("off-repeat"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 👉 Следующий трек"
+    )
+    async def snextcmd(self, message: Message):
+        """👉 Next track"""
+        self.sp.next_track()
+        await utils.answer(message, self.strings("skipped"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🤚 Продолжить воспроизведение"
+    )
+    async def sresumecmd(self, message: Message):
+        """- 🤚 Resume"""
+        self.sp.start_playback()
+        await utils.answer(message, self.strings("playing"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🤚 Пауза"
+    )
+    async def spausecmd(self, message: Message):
+        """- 🤚 Pause"""
+        self.sp.pause_playback()
+        await utils.answer(message, self.strings("paused"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ⏮ Предыдущий трек"
+    )
+    async def sbackcmd(self, message: Message):
+        """- ⏮ Previous track"""
+        self.sp.previous_track()
+        await utils.answer(message, self.strings("back"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ⏪ Перезапустить трек"
+    )
+    async def sbegincmd(self, message: Message):
+        """- ⏪ Restart track"""
+        self.sp.seek_track(0)
+        await utils.answer(message, self.strings("restarted"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ❤️ Лайкнуть играющий трек"
+    )
+    async def slikecmd(self, message: Message):
+        """- ❤️ Like current track"""
+        cupl = self.sp.current_playback()
+        self.sp.current_user_saved_tracks_add([cupl["item"]["id"]])
+        await utils.answer(message, self.strings("liked"))
+    
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 💔 Убрать лайк с играющего трека"
+    )
+    async def sunlikecmd(self, message: Message):
+        """- 💔 Unlike current track"""
+        cupl = self.sp.current_playback()
+        self.sp.current_user_saved_tracks_delete([cupl["item"]["id"]])
+        await utils.answer(message, self.strings("unlike"))
 
     @error_handler
     @loader.command(
