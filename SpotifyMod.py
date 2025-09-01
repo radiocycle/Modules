@@ -643,7 +643,8 @@ class SpotifyMod(loader.Module):
         if (
             track_msg
             and track_msg.media
-            and getattr(track_msg.media, "mime_type", "").startswith("audio/")
+            and hasattr(track_msg.media, "document")
+            and getattr(track_msg.media.document, "mime_type", "").startswith("audio/")
         ):
             await utils.answer(msg, text, file=track_msg.media)
         else:
