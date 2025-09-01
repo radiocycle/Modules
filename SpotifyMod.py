@@ -639,7 +639,12 @@ class SpotifyMod(loader.Module):
 
         msg = await utils.answer(message, text + f'\n\n{self.config["download_track_text"]}')
         track_msg = await self._dl_track(message.client, track, artists)
-        if track_msg and track_msg.media:
+
+        if (
+            track_msg
+            and track_msg.media
+            and getattr(track_msg.media, "mime_type", "").startswith("audio/")
+        ):
             await utils.answer(msg, text, file=track_msg.media)
         else:
             await utils.answer(msg, self.strings("dl_err"))
