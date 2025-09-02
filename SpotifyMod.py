@@ -338,7 +338,7 @@ class SpotifyMod(loader.Module):
             if response.buttons:
                 for i, row in enumerate(response.buttons):
                     for j, button in enumerate(row):
-                        if track.lower() in button.text.lower():
+                        if track.lower() and artists.lower() in button.text.lower():
                             candidate_pos = (i, j)
                             break
                     if candidate_pos:
