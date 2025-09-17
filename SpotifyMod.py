@@ -100,6 +100,63 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Failed to download"
             " track.</b>"
         ),
+        "volume_changed": (
+            "<emoji document_id=5890997763331591703>🔊</emoji>"
+            " <b>Volume changed to {}%.</b>"
+        ),
+        "volume_invalid": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Volume level must be"
+            " a number between 0 and 100.</b>"
+        ),
+        "volume_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred while"
+            " changing volume.</b>"
+        ),
+        "no_volume_arg": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a"
+            " volume level between 0 and 100.</b>"
+        ),
+        "searching_tracks": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Searching for tracks"
+            " matching {}...</b>"
+        ),
+        "no_search_query": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a"
+            " search query.</b>"
+        ),
+        "no_tracks_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>No tracks found for"
+            " {}.</b>"
+        ),
+        "search_results": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Search results for"
+            " {}:</b>\n\n{}"
+        ),
+        "downloading_search_track": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Downloading {}...</b>"
+        ),
+        "download_success": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded {}.</b>"
+        ),
+        "invalid_track_number": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid track number."
+            " Please search first or provide a valid number from the list.</b>"
+        ),
+        "device_list": (
+            "<emoji document_id=5956561916573782596>📄</emoji> <b>Available devices:</b>\n{}"
+        ),
+        "no_devices_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>No devices found.</b>"
+        ),
+        "device_changed": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Playback transferred to"
+            " {}.</b>"
+        ),
+        "invalid_device_id": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid device ID."
+            " Use</b> <code>.sdevice</code> <b>to see available devices.</b>"
+        ),
+        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Search results cleared</b>",
     }
 
     strings_ru = {
@@ -153,6 +210,63 @@ class SpotifyMod(loader.Module):
         "dl_err": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Не удалось скачать трек.</b>"
         ),
+        "volume_changed": (
+            "<emoji document_id=5890997763331591703>🔊</emoji>"
+            " <b>Громкость изменена на {}%.</b>"
+        ),
+        "volume_invalid": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Уровень громкости должен"
+            " быть числом от 0 до 100.</b>"
+        ),
+        "volume_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Произошла ошибка при"
+            " изменении громкости.</b>"
+        ),
+        "no_volume_arg": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите"
+            " уровень громкости от 0 до 100.</b>"
+        ),
+        "searching_tracks": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Идет поиск треков"
+            " по запросу {}...</b>"
+        ),
+        "no_search_query": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите"
+            " поисковый запрос.</b>"
+        ),
+        "no_tracks_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>По запросу '{}'"
+            " ничего не найдено.</b>"
+        ),
+        "search_results": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Результаты поиска"
+            " по запросу {}:</b>\n\n{}"
+        ),
+        "downloading_search_track": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Скачиваю {}...</b>"
+        ),
+        "download_success": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} успешно скачан.</b>"
+        ),
+        "invalid_track_number": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Некорректный номер трека."
+            " Сначала выполните поиск или укажите правильный номер из списка.</b>"
+        ),
+        "device_list": (
+            "<emoji document_id=5956561916573782596>📄</emoji> <b>Доступные устройства:</b>\n{}"
+        ),
+        "no_devices_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Устройства не найдены.</b>"
+        ),
+        "device_changed": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Воспроизведение переключено на"
+            " {}.</b>"
+        ),
+        "invalid_device_id": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>Некорректный ID устройства."
+            " Используйте</b> <code>.sdevice</code> <b>, чтобы увидеть доступные устройства.</b>"
+        ),
+        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Результаты поиска очищены</b>",
     }
 
     def __init__(self):
@@ -213,6 +327,18 @@ class SpotifyMod(loader.Module):
                 "time_font",
                 "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
                 "Custom font for time. Specify URL to .ttf file",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "search_result_text",
+                "<b>{number}.</b> {track_name} — {artists}\n<a href='{track_url}'>🔗 Spotify</a>",
+                """Custom text for a single search result. Supports {number}, {track_name}, {artists}, {track_url} placeholders""",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "downloaded_search_track",
+                "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded</b> {track} — {artists}",
+                """Custom text for a single search result. Supports {track}, {artists} placeholders""",
                 validator=loader.validators.String(),
             ),
         )
@@ -329,8 +455,8 @@ class SpotifyMod(loader.Module):
         by.name = "banner.png"
         return by
 
-    async def _dl_track(self, client, track, artists):
-        query = f"{track} - {artists}"
+    async def _dl_track(self, client, track: str, artists: str):
+        query = f"{track}"
         async with client.conversation("@LosslessRobot") as conv:
             await conv.send_message(query)
             response = await conv.get_response()
@@ -338,7 +464,8 @@ class SpotifyMod(loader.Module):
             if response.buttons:
                 for i, row in enumerate(response.buttons):
                     for j, button in enumerate(row):
-                        if track.lower() and artists.lower() in button.text.lower():
+                        button_text = button.text.lower()
+                        if track.lower() in button_text and artists.lower() in button_text:
                             candidate_pos = (i, j)
                             break
                     if candidate_pos:
@@ -350,6 +477,80 @@ class SpotifyMod(loader.Module):
                 return track_msg
             return None
 
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🔊 Изменить громкость. .svolume <0-100>"
+    )
+    async def svolume(self, message: Message):
+        """🔊 Change playback volume. .svolume <0-100>"""
+        try:
+            args = utils.get_args_raw(message)
+            if not args:
+                await utils.answer(message, self.strings("no_volume_arg"))
+                return
+
+            volume_percent = int(args)
+            if 0 <= volume_percent <= 100:
+                self.sp.volume(volume_percent)
+                await utils.answer(message, self.strings("volume_changed").format(volume_percent))
+            else:
+                await utils.answer(message, self.strings("volume_invalid"))
+        except ValueError:
+            await utils.answer(message, self.strings("volume_invalid"))
+        except Exception:
+            await utils.answer(message, self.strings("volume_err"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc=(
+            "- 🎵 Выбрать устройство для воспроизведения. Например: .sdevice <ID устройства>\n"
+            "- 📝 Показать список устройств: .sdevice"
+        )
+    )
+    async def sdevicecmd(self, message: Message):
+        """🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice to list devices"""
+        args = utils.get_args_raw(message)
+        devices = self.sp.devices()["devices"]
+
+        if not args:
+            if not devices:
+                await utils.answer(message, self.strings("no_devices_found"))
+                return
+
+            device_list_text = ""
+            for i, device in enumerate(devices):
+                is_active = "(active)" if device["is_active"] else ""
+                device_list_text += (
+                    f"<b>{i+1}.</b> {device['name']}"
+                    f" ({device['type']}) {is_active}\n"
+                )
+
+            await utils.answer(message, self.strings("device_list").format(device_list_text.strip()))
+            return
+
+        device_id = None
+        try:
+            device_number = int(args)
+            if 0 < device_number <= len(devices):
+                device_id = devices[device_number - 1]["id"]
+                device_name = devices[device_number - 1]["name"]
+            else:
+                await utils.answer(message, self.strings("invalid_device_id"))
+                return
+        except ValueError:
+            found_device = next((d for d in devices if d["id"] == args.strip()), None)
+            if found_device:
+                device_id = found_device["id"]
+                device_name = found_device["name"]
+            else:
+                await utils.answer(message, self.strings("invalid_device_id"))
+                return
+
+        self.sp.transfer_playback(device_id=device_id)
+        await utils.answer(message, self.strings("device_changed").format(device_name))
+            
     @error_handler
     @tokenized
     @loader.command(
@@ -649,6 +850,83 @@ class SpotifyMod(loader.Module):
             await utils.answer(msg, text, file=track_msg.media)
         else:
             await utils.answer(msg, self.strings("dl_err"))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc=(
+            "- 🔍 Поиск треков. Например: .ssearch Imagine Dragons Believer\n"
+            "- 🎧 Скачать трек: .ssearch 1 (где 1 — номер трека из списка)"
+        )
+    )
+    async def ssearchcmd(self, message: Message):
+        """🔍 Search for tracks. Usage: .ssearch <query> or .ssearch <number> to download"""
+        args = utils.get_args_raw(message)
+        if not args:
+            await utils.answer(message, self.strings("no_search_query"))
+            return
+
+        try:
+            track_number = int(args)
+            search_results = self.get("last_search_results", [])
+            if not search_results or track_number <= 0 or track_number > len(search_results):
+                raise ValueError
+
+            msg = await utils.answer(message, f'{self.config["download_track_text"]}')
+            track_info = search_results[track_number - 1]
+            track_name = track_info["name"]
+            artists = ", ".join([a["name"] for a in track_info["artists"]])
+            
+            track_msg = await self._dl_track(message.client, track_name, artists)
+            
+            if not track_msg:
+                return
+
+            await utils.answer(
+                msg,
+                self.config["downloaded_search_track"].format(
+                    track=track_name,
+                    artists=artists,
+                ),
+                file=track_msg.media,
+            )
+
+            return
+        except ValueError:
+            await utils.answer(message, self.strings("searching_tracks").format(args))
+
+            results = self.sp.search(q=args, limit=5, type="track")
+
+            if not results or not results["tracks"]["items"]:
+                await utils.answer(message, self.strings("no_tracks_found").format(args))
+                return
+
+            self.set("last_search_results", results["tracks"]["items"])
+            
+            tracks_list = []
+            for i, track in enumerate(results["tracks"]["items"]):
+                track_name = track["name"]
+                artists = ", ".join([artist["name"] for artist in track["artists"]])
+                track_url = track["external_urls"]["spotify"]
+                tracks_list.append(
+                    self.config["search_result_text"].format(
+                        number=i + 1,
+                        track_name=utils.escape_html(track_name),
+                        artists=utils.escape_html(artists),
+                        track_url=track_url,
+                    )
+                )
+
+            text = "\n".join(tracks_list)
+            await utils.answer(message, self.strings("search_results").format(args, text))
+    
+    @loader.command(
+        ru_doc="- 🔄 Сброс результатов поиска по трекам"
+    )
+    async def ssearchresetcmd(self, message: Message):
+        """- 🔄 Reset track search results"""
+        self.set("last_search_results", [])
+        await utils.answer(message, self.strings["search_results_cleared"])
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
