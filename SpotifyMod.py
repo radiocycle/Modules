@@ -456,7 +456,7 @@ class SpotifyMod(loader.Module):
         return by
 
     async def _dl_track(self, client, track: str, artists: str):
-        query = f"{track}"
+        query = f"{track} - {artists}"
         async with client.conversation("@LosslessRobot") as conv:
             await conv.send_message(query)
             response = await conv.get_response()
