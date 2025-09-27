@@ -10,7 +10,7 @@
 # You CANNOT edit, distribute or redistribute this file without direct permission from the author.
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
-# meta developer: @cachedfiles, @kamekuro_hmods, @extracli
+# meta developer: @cachedfiles x @kamekuro_hmods
 # requires: telethon spotipy pillow requests
 
 import asyncio
