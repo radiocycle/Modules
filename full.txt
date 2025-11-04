@@ -1,5 +1,4 @@
 Neofetch
-playerctl
 randomanimepic
 SpotifyMod
 UnbanAll
