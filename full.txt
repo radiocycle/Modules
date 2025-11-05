@@ -3,3 +3,4 @@ randomanimepic
 SpotifyMod
 UnbanAll
 voicetotext
+playerctl
