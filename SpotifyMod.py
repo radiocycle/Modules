@@ -157,6 +157,9 @@ class SpotifyMod(loader.Module):
             " Use</b> <code>.sdevice</code> <b>to see available devices.</b>"
         ),
         "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Search results cleared</b>",
+        "autobio": (
+            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify autobio {}</b>"
+        ),
     }
 
     strings_ru = {
@@ -267,6 +270,10 @@ class SpotifyMod(loader.Module):
             " Используйте</b> <code>.sdevice</code> <b>, чтобы увидеть доступные устройства.</b>"
         ),
         "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Результаты поиска очищены</b>",
+        "autobio": (
+            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Обновление био"
+            " включено {}</b>"
+        ),
     }
 
     def __init__(self):
@@ -341,6 +348,11 @@ class SpotifyMod(loader.Module):
                 """Custom text for a single search result. Supports {track}, {artists} placeholders""",
                 validator=loader.validators.String(),
             ),
+            loader.ConfigValue(
+                "auto_bio_template",
+                "🎧 {}",
+                lambda: "Template for Spotify AutoBio",
+            ),
         )
 
     async def client_ready(self, client, db):
@@ -352,6 +364,9 @@ class SpotifyMod(loader.Module):
         except Exception:
             self.set("acs_tkn", None)
             self.sp = None
+
+        if self.get("autobio", False):
+            self.autobio.start()
 
         with contextlib.suppress(Exception):
             await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
@@ -395,65 +410,74 @@ class SpotifyMod(loader.Module):
         self,
         title: str, artists: list,
         duration: int, progress: int,
-        track_cover: bytes
+        track_cover: bytes,
     ):
-        w, h = 1920, 768
-        title_font = ImageFont.truetype(io.BytesIO(requests.get(
+        W, H = 1920, 768
+        title_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
             self.config["title_font"]
         ).content), 80)
-        art_font = ImageFont.truetype(io.BytesIO(requests.get(
+        artist_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
             self.config["artists_font"]
         ).content), 55)
         time_font = ImageFont.truetype(io.BytesIO(requests.get(
             self.config["time_font"]
         ).content), 36)
+        def measure(t: str, f: ImageFont.FreeTypeFont, d: ImageDraw.ImageDraw):
+            bb = d.textbbox((0, 0), t, font=f)
+            return bb[2] - bb[0], bb[3] - bb[1]
 
         track_cov = Image.open(io.BytesIO(track_cover)).convert("RGBA")
-        banner = track_cov.resize((w, w)).crop(
-            (0, (w-h)//2, w, ((w-h)//2)+h)
-        ).filter(ImageFilter.GaussianBlur(radius=14))
+        banner = (
+            track_cov.resize((W, W))
+            .crop((0, (W-H) // 2, W, ((W-H) // 2) + H))
+            .filter(ImageFilter.GaussianBlur(radius=14))
+        )
         banner = ImageEnhance.Brightness(banner).enhance(0.3)
+        draw = ImageDraw.Draw(banner)
 
-        track_cov = track_cov.resize((banner.size[1]-150, banner.size[1]-150))
+        track_cov = track_cov.resize((H-350, H-350))
         mask = Image.new("L", track_cov.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
+        )
         track_cov.putalpha(mask)
         track_cov = track_cov.crop(track_cov.getbbox())
-        banner.paste(track_cov, (75, 75), mask)
+        banner.paste(track_cov, (175, 175), mask)
 
-        title_lines = textwrap.wrap(title, 23)
-        if len(title_lines) > 1:
-            title_lines[1] = title_lines[1] + "..." if len(title_lines) > 2 else title_lines[1]
-        title_lines = title_lines[:2]
-        artists_lines = textwrap.wrap(", ".join(artists), width=40)
-        if len(artists_lines) > 1:
-            for index, art in enumerate(artists_lines):
-                if "," in art[-2:]:
-                    artists_lines[index] = art[:art.rfind(",") - 1]
+        x1, y1, x2, y2 = 643, 175, 1887, 593
+        aw, ah = x2-x1, y2-y1
+        tls = textwrap.wrap(title, width=23)
+        if len(tls) > 2:
+            tls = tls[:2]
+            tls[-1] = tls[-1][:-1]+"…"
+        als = textwrap.wrap(', '.join(artists), width=30)
+        if len(als) > 1:
+            als = als[:1]
+            als[-1] = als[-1][:-1]+"…"
+        lines = tls+als
+        lsizes = [measure(l, artist_font_nl if (i==(len(lines)-1)) else title_font_nl, draw) for i, l in enumerate(lines)]
+        hs = [h for _, h in lsizes]
+        spacing = title_font_nl.size+10
+        th = sum(hs) + spacing
+        y_start = y1 + (ah-th) / 2
+        for i, line in enumerate(lines):
+            w, _ = lsizes[i]
+            draw.text((x1 + (aw-w) / 2, y_start), line, font=(artist_font_nl if (i==(len(lines)-1)) else title_font_nl), fill="#FFFFFF")
+            y_start += spacing
 
-        draw = ImageDraw.Draw(banner)
-        x, y = 150+track_cov.size[0], 110
-        for index, line in enumerate(title_lines):
-            draw.text((x, y), line, font=title_font, fill="#FFFFFF")
-            if index != len(title_lines)-1:
-                y += 70
-        x, y = 150+track_cov.size[0], 110*2
-        if len(title_lines) > 1: y += 70
-        for index, line in enumerate(artists_lines):
-            draw.text((x, y), line, font=art_font, fill="#A0A0A0")
-            if index != len(artists_lines)-1:
-                y += 50
-
-        draw.rounded_rectangle([768, 650, 768+1072, 650+15], radius=15//2, fill="#A0A0A0")
-        if duration > 0:
-             draw.rounded_rectangle([768, 650, 768+int(1072*(progress/duration)), 650+15], radius=15//2, fill="#FFFFFF")
-        draw.text((768, 600), f"{(progress//1000//60):02}:{(progress//1000%60):02}", font=time_font, fill="#FFFFFF")
-        draw.text((1745, 600), f"{(duration//1000//60):02}:{(duration//1000%60):02}", font=time_font, fill="#FFFFFF")
+        draw.text((75, 650), f"{(progress//1000//60):02}:{(progress//1000%60):02}", font=time_font, fill="#FFFFFF")
+        draw.text((1745, 650), f"{(duration//1000//60):02}:{(duration//1000%60):02}", font=time_font, fill="#FFFFFF")
+        draw.rounded_rectangle([75, 700, 1846, 715], radius=15//2, fill="#A0A0A0")
+        draw.rounded_rectangle(
+            [75, 700, 75 + int(progress / duration * 1846), 715], radius=15//2, fill="#FFFFFF"
+        )
 
         by = io.BytesIO()
-        banner.save(by, format="PNG"); by.seek(0)
+        banner.save(by, format="PNG")
+        by.seek(0)
         by.name = "banner.png"
         return by
+
 
     async def _dl_track(self, client, track: str, artists: str):
         query = f"{track} - {artists}"
@@ -477,13 +501,53 @@ class SpotifyMod(loader.Module):
                 return track_msg
             return None
 
+    @loader.loop(interval=90)
+    async def autobio(self):
+        try:
+            current_playback = self.sp.current_playback()
+            track = current_playback["item"]["name"]
+            track = re.sub(r"([(].*?[)])", "", track).strip()
+        except Exception:
+            return
+
+        bio = self.config["auto_bio_template"].format(f"{track}")
+
+        try:
+            await self._client(
+                UpdateProfileRequest(about=bio[: 140 if self._premium else 70])
+            )
+        except FloodWaitError as e:
+            logger.info(f"Sleeping {max(e.seconds, 60)} bc of floodwait")
+            await asyncio.sleep(max(e.seconds, 60))
+            return
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ℹ️ Переключить стриминг воспроизведения в био"
+    )
+    async def sbiocmd(self, message: Message):
+        """- ℹ️ Toggle bio playback streaming"""
+        current = self.get("autobio", False)
+        new = not current
+        self.set("autobio", new)
+        await utils.answer(
+            message,
+            self.strings("autobio").format("enabled" if new else "disabled"),
+        )
+
+        if new:
+            self.autobio.start()
+        else:
+            self.autobio.stop()
+
     @error_handler
     @tokenized
     @loader.command(
         ru_doc="- 🔊 Изменить громкость. .svolume <0-100>"
     )
     async def svolume(self, message: Message):
-        """🔊 Change playback volume. .svolume <0-100>"""
+        """- 🔊 Change playback volume. .svolume <0-100>"""
         try:
             args = utils.get_args_raw(message)
             if not args:
@@ -510,7 +574,7 @@ class SpotifyMod(loader.Module):
         )
     )
     async def sdevicecmd(self, message: Message):
-        """🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice to list devices"""
+        """- 🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice to list devices"""
         args = utils.get_args_raw(message)
         devices = self.sp.devices()["devices"]
 
@@ -557,7 +621,7 @@ class SpotifyMod(loader.Module):
         ru_doc="- 💫 Включить повтор трека"
     )
     async def srepeatcmd(self, message: Message):
-        """💫 Repeat"""
+        """- 💫 Repeat"""
         self.sp.repeat("track")
         await utils.answer(message, self.strings("on-repeat"))
 
@@ -567,7 +631,7 @@ class SpotifyMod(loader.Module):
         ru_doc="- ✋ Остановить повтор"
     )
     async def sderepeatcmd(self, message: Message):
-        """✋ Stop repeat"""
+        """- ✋ Stop repeat"""
         self.sp.repeat("context")
         await utils.answer(message, self.strings("off-repeat"))
 
@@ -577,7 +641,7 @@ class SpotifyMod(loader.Module):
         ru_doc="- 👉 Следующий трек"
     )
     async def snextcmd(self, message: Message):
-        """👉 Next track"""
+        """- 👉 Next track"""
         self.sp.next_track()
         await utils.answer(message, self.strings("skipped"))
 
