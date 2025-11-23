@@ -15,7 +15,7 @@ class VoiceToTextMod(loader.Module):
         "vtt_success": "<emoji document_id=5116110535565247270>🔥</emoji> <b>Recognized text:</b>\n<blockquote expandable>{}</blockquote>",
         "vtt_failure": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Failed to recognize the message.</b>",
         "vtt_request_error": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Error when contacting the recognition service:</b>\n<code>{}</code>",
-        "vtt_invalid": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Please reply to a voice or video message with the command</b> <code>{1}vtt</code>",
+        "vtt_invalid": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Please reply to a voice or video message with the command</b> <code>{}vtt</code>",
         "vtt_successful": "<emoji document_id=4916036072560919511>✅</emoji> <b>Text recognized successfully</b>",
     }
 
@@ -24,7 +24,7 @@ class VoiceToTextMod(loader.Module):
         "vtt_success": "<emoji document_id=5116110535565247270>🔥</emoji> <b>Распознанный текст:</b>\n<blockquote expandable>{}</blockquote>",
         "vtt_failure": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Не удалось распознать сообщение.</b>",
         "vtt_request_error": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Ошибка при обращении к сервису распознавания:</b>\n<code>{}</code>",
-        "vtt_invalid": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Пожалуйста, ответьте на голосовое или видеосообщение командой</b> <code>.vtt</code>",
+        "vtt_invalid": "<emoji document_id=5116151848855667552>🚫</emoji> <b>Пожалуйста, ответьте на голосовое или видеосообщение командой</b> <code>{}vtt</code>",
         "vtt_successful": "<emoji document_id=4916036072560919511>✅</emoji> <b>Текст успешно распознан</b>",
     }
 
@@ -33,17 +33,13 @@ class VoiceToTextMod(loader.Module):
     )
     async def vttcmd(self, message):
         """- recognizes text from voice or video messages."""
-        await self._vtt_process(message)
-
-    async def _vtt_process(self, message):
-        """processing voice/video messages to text"""
         reply = await message.get_reply_message()
 
         if not reply or not (reply.voice or reply.video_note):
-            await message.respond(self.strings["vtt_invalid"].format(self.get_prefix()))
+            await utils.answer(message, self.strings["vtt_invalid"].format(self.get_prefix()))
             return
 
-        waiting_message = await utils.answer(
+        msg = await utils.answer(
             message, self.strings["process_text"], reply_to=message.id
         )
 
@@ -57,14 +53,11 @@ class VoiceToTextMod(loader.Module):
                 audio_data = recognizer.record(source)
                 try:
                     text = recognizer.recognize_google(audio_data, language='ru-RU')
-                    await reply.reply(self.strings["vtt_success"].format(text))
-                    await waiting_message.edit(self.strings["vtt_successful"])
+                    await utils.answer(msg, self.strings["vtt_success"].format(text))
                 except sr.UnknownValueError:
-                    await waiting_message.delete()
-                    await reply.reply(self.strings["vtt_failure"])
+                    await utils.answer(msg, self.strings["vtt_failure"])
                 except sr.RequestError as e:
-                    await waiting_message.delete()
-                    await reply.reply(self.strings["vtt_request_error"].format(e))
+                    await utils.answer(msg, self.strings["vtt_request_error"].format(e))
         finally:
             os.remove(media_file)
             os.remove(wav_file)
