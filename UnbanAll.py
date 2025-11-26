@@ -1,4 +1,4 @@
-# meta developer: @cachedfiles
+# meta developer: @ke_mods
 
 from .. import loader, utils
 from telethon.tl.types import ChatBannedRights

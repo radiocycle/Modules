@@ -1,4 +1,4 @@
-# meta developer: @cachedfiles
+# meta developer: @ke_mods
 # scope: ffmpeg
 # requires: pydub SpeechRecognition
 

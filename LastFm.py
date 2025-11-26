@@ -12,7 +12,7 @@
 # Author: @codrago
 # Commands: nowplay
 # scope: heroku_only
-# meta developer: @cachedfiles
+# meta developer: @ke_mods
 # meta banner: https://raw.githubusercontent.com/coddrago/modules/refs/heads/main/banner.png
 # meta pic: https://envs.sh/Hob.webp
 # ---------------------------------------------------------------------------------
