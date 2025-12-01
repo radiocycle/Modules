@@ -11,7 +11,7 @@
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
 # meta developer: @ke_mods
-# requires: telethon spotipy pillow requests
+# requires: telethon spotipy pillow requests spotdl
 
 import asyncio
 import contextlib
@@ -21,6 +21,8 @@ import logging
 import textwrap
 import time
 import traceback
+import os
+import subprocess
 from types import FunctionType
 
 import requests
@@ -136,7 +138,7 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=5841359499146825803>🕔</emoji> <b>Downloading {}...</b>"
         ),
         "download_success": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded {}.</b>"
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded {} - {}</b>"
         ),
         "invalid_track_number": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid track number."
@@ -160,6 +162,10 @@ class SpotifyMod(loader.Module):
         "autobio": (
             "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify autobio {}</b>"
         ),
+        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL not found... Check config or install spotdl (<code>{}terminal pip install spotdl</code>)</b>",
+        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Download failed</b>",
+        "gen_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
+        "dl_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
     }
 
     strings_ru = {
@@ -249,7 +255,7 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=5841359499146825803>🕔</emoji> <b>Скачиваю {}...</b>"
         ),
         "download_success": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} успешно скачан.</b>"
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} - {} успешно скачан.</b>"
         ),
         "invalid_track_number": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Некорректный номер трека."
@@ -274,6 +280,10 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=6319076999105087378>🎧</emoji> <b>Обновление био"
             " включено {}</b>"
         ),
+        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL не найден... Проверьте конфиг или установите spotdl (<code>{}terminal pip install spotdl</code>)</b>",
+        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Ошибка скачивания.</b>",
+        "gen_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Генерация баннера...</i>",
+        "dl_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
     }
 
     def __init__(self):
@@ -307,51 +317,21 @@ class SpotifyMod(loader.Module):
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
-                "banner_gen_text",
-                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
-                "Custom banner generation text",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "download_track_text",
-                "<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
-                "Custom download text for snowt",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "title_font",
+                "font",
                 "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
-                "Custom font for title. Specify URL to .ttf file",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "artists_font",
-                "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Regular.ttf",
-                "Custom font for artists. Specify URL to .ttf file",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "time_font",
-                "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf",
-                "Custom font for time. Specify URL to .ttf file",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "search_result_text",
-                "<b>{number}.</b> {track_name} — {artists}\n<a href='{track_url}'>🔗 Spotify</a>",
-                """Custom text for a single search result. Supports {number}, {track_name}, {artists}, {track_url} placeholders""",
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "downloaded_search_track",
-                "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded</b> {track} — {artists}",
-                """Custom text for a single search result. Supports {track}, {artists} placeholders""",
+                "Custom font. Specify URL to .ttf file",
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
                 "auto_bio_template",
                 "🎧 {}",
                 lambda: "Template for Spotify AutoBio",
+            ),
+            loader.ConfigValue(
+                "spotdl_path",
+                "~/.local/bin/spotdl",
+                "Path to spotdl binary",
+                validator=loader.validators.String(),
             ),
         )
 
@@ -370,9 +350,6 @@ class SpotifyMod(loader.Module):
 
         with contextlib.suppress(Exception):
             await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
-
-        with contextlib.suppress(Exception):
-            await utils.dnd(client, "@LosslessRobot", archive=True)
 
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
@@ -414,13 +391,13 @@ class SpotifyMod(loader.Module):
     ):
         W, H = 1920, 768
         title_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["title_font"]
+            self.config["font"]
         ).content), 80)
         artist_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["artists_font"]
+            self.config["font"]
         ).content), 55)
         time_font = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["time_font"]
+            self.config["font"]
         ).content), 36)
         def measure(t: str, f: ImageFont.FreeTypeFont, d: ImageDraw.ImageDraw):
             bb = d.textbbox((0, 0), t, font=f)
@@ -478,28 +455,6 @@ class SpotifyMod(loader.Module):
         by.name = "banner.png"
         return by
 
-
-    async def _dl_track(self, client, track: str, artists: str):
-        query = f"{track} - {artists}"
-        async with client.conversation("@LosslessRobot") as conv:
-            await conv.send_message(query)
-            response = await conv.get_response()
-            candidate_pos = None
-            if response.buttons:
-                for i, row in enumerate(response.buttons):
-                    for j, button in enumerate(row):
-                        button_text = button.text.lower()
-                        if track.lower() in button_text and artists.lower() in button_text:
-                            candidate_pos = (i, j)
-                            break
-                    if candidate_pos:
-                        break
-                if candidate_pos is None:
-                    candidate_pos = (0, 0)
-                await response.click(*candidate_pos)
-                track_msg = await conv.get_response()
-                return track_msg
-            return None
 
     @loader.loop(interval=90)
     async def autobio(self):
@@ -826,7 +781,7 @@ class SpotifyMod(loader.Module):
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
             cover_bytes = await utils.run_sync(requests.get, cover_url)
 
-            tmp_msg = await utils.answer(message, text + f'\n\n{self.config["banner_gen_text"]}')
+            tmp_msg = await utils.answer(message, text + self.strings("gen_banner"))
 
             banner_file = await utils.run_sync(
                 self._create_banner,
@@ -902,21 +857,41 @@ class SpotifyMod(loader.Module):
             playlist_owner=playlist_owner or "",
         )
 
-        msg = await utils.answer(message, text + f'\n\n{self.config["download_track_text"]}')
-        track_msg = await self._dl_track(message.client, track, artists)
+        msg = await utils.answer(message, text + self.strings("dl_track"))
+        
+        proc = await asyncio.create_subprocess_shell(
+            f'{self.config["spotdl_path"]} {spotify_url}',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-        if (
-            track_msg
-            and track_msg.media
-            and hasattr(track_msg.media, "document")
-            and getattr(track_msg.media.document, "mime_type", "").startswith("audio/")
-        ):
-            await utils.answer(msg, text, file=track_msg.media)
-        else:
-            await utils.answer(msg, self.strings("dl_err"))
+        _ = await proc.stdout.readline()
+        line = (await proc.stdout.readline()).decode().rstrip()
+        
+        await proc.wait()
+        
+        err = await proc.stderr.readline()
+        if ": not found" in err.decode():
+            await utils.answer(msg, self.strings("no_spotdl").format(self.get_prefix()))
+            return
+
+        try:
+            track_name = f'{artists} - {track}'
+            
+            file_path = track_name + ".mp3"
+
+            if os.path.exists(file_path):
+                await utils.answer(msg, text, file=file_path)
+                os.remove(file_path)
+            else:
+                raise FileNotFoundError("File not found logic triggered")
+
+        except Exception as e:
+            await utils.answer(msg, text + self.strings["snowt_failed"])
+            logger.error(e)
+
 
     @error_handler
-    @tokenized
     @loader.command(
         ru_doc=(
             "- 🔍 Поиск треков. Например: .ssearch Imagine Dragons Believer\n"
@@ -936,26 +911,38 @@ class SpotifyMod(loader.Module):
             if not search_results or track_number <= 0 or track_number > len(search_results):
                 raise ValueError
 
-            msg = await utils.answer(message, f'{self.config["download_track_text"]}')
+            msg = await utils.answer(message, self.strings("dl_track"))
+            
             track_info = search_results[track_number - 1]
             track_name = track_info["name"]
             artists = ", ".join([a["name"] for a in track_info["artists"]])
-            
-            track_msg = await self._dl_track(message.client, track_name, artists)
-            
-            if not track_msg:
-                return
+            track_url = track_info["external_urls"]["spotify"]
 
-            await utils.answer(
-                msg,
-                self.config["downloaded_search_track"].format(
-                    track=track_name,
-                    artists=artists,
-                ),
-                file=track_msg.media,
+            proc = await asyncio.create_subprocess_shell(
+                f'{self.config["spotdl_path"]} {track_url}',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
+            
+            await proc.communicate()
+            
+            file_path = f"{artists} - {track_name}.mp3"
+
+            if os.path.exists(file_path):
+                await utils.answer(
+                    msg,
+                    self.strings["download_success"].format(
+                        track_name,
+                        artists,
+                    ),
+                    file=file_path,
+                )
+                os.remove(file_path)
+            else:
+                await utils.answer(msg, self.strings["snowt_failed"])
 
             return
+
         except ValueError:
             await utils.answer(message, self.strings("searching_tracks").format(args))
 
@@ -973,7 +960,7 @@ class SpotifyMod(loader.Module):
                 artists = ", ".join([artist["name"] for artist in track["artists"]])
                 track_url = track["external_urls"]["spotify"]
                 tracks_list.append(
-                    self.config["search_result_text"].format(
+                    "<b>{number}.</b> {track_name} — {artists}\n<a href='{track_url}'>🔗 Spotify</a>".format(
                         number=i + 1,
                         track_name=utils.escape_html(track_name),
                         artists=utils.escape_html(artists),
