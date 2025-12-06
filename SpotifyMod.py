@@ -35,6 +35,184 @@ from .. import loader, utils
 logger = logging.getLogger(__name__)
 logging.getLogger("spotipy").setLevel(logging.CRITICAL)
 
+class Banners:
+    def __init__(
+        self,
+        title: str,
+        artists: list,
+        duration: int,
+        progress: int,
+        track_cover: bytes,
+        font
+    ):
+        self.title = title
+        self.artists = artists
+        self.duration = duration
+        self.progress = progress
+        self.track_cover = track_cover
+        self.font = font
+
+    def measure(
+        self, text: str, font: ImageFont.FreeTypeFont, draw: ImageDraw.ImageDraw
+    ):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+
+    def new(self):
+        W, H = 1920, 768
+        title_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 80)
+        artist_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 55)
+        time_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 36)
+
+        track_cov = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        banner = (
+            track_cov.resize((W, W))
+            .crop((0, (W - H) // 2, W, ((W - H) // 2) + H))
+            .filter(ImageFilter.GaussianBlur(radius=14))
+        )
+        banner = ImageEnhance.Brightness(banner).enhance(0.3)
+        draw = ImageDraw.Draw(banner)
+
+        track_cov = track_cov.resize((H - 250, H - 250))
+        mask = Image.new("L", track_cov.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
+        )
+        track_cov.putalpha(mask)
+        track_cov = track_cov.crop(track_cov.getbbox())
+        banner.paste(track_cov, (75, 75), mask)
+
+        space = (643, 75, 1870, 593)
+        title_lines = textwrap.wrap(self.title, width=23)
+        if len(title_lines) > 2:
+            title_lines = title_lines[:2]
+            title_lines[-1] = title_lines[-1][:-1] + "…"
+        artist_lines = textwrap.wrap("".join(self.artists), width=23)
+        if len(artist_lines) > 1:
+            artist_lines = artist_lines[:1]
+            artist_lines[-1] = artist_lines[-1][:-1] + "…"
+        lines = title_lines + artist_lines
+        lines_sizes = [
+            self.measure(
+                line, artist_font if (i == len(lines)-1) else title_font, draw
+            )
+            for i, line in enumerate(lines)
+        ]
+        total_sizes = [sum(w for w, _ in lines_sizes), sum(h for _, h in lines_sizes)]
+        spacing = title_font.size + 10
+        y_start = space[1] + ((space[3]-space[1]-total_sizes[1]) / 2)
+        for i, line in enumerate(lines):
+            w, _ = lines_sizes[i]
+            draw.text(
+                (space[0] + (space[2]-space[0]-w) / 2, y_start),
+                line,
+                font=(artist_font if (i == (len(lines)-1)) else title_font),
+                fill="#FFFFFF",
+            )
+            y_start += spacing
+
+        draw.text(
+            (75, 650),
+            f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}",
+            font=time_font,
+            fill="#FFFFFF",
+        )
+        draw.text(
+            (1745, 650),
+            f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}",
+            font=time_font,
+            fill="#FFFFFF",
+        )
+        draw.rounded_rectangle([75, 700, 1845, 715], radius=15 // 2, fill="#A0A0A0")
+        draw.rounded_rectangle(
+            [75, 700, int(75 + (1770 * self.progress / self.duration)), 715],
+            radius=15 // 2,
+            fill="#FFFFFF",
+        )
+
+        by = io.BytesIO()
+        banner.save(by, format="PNG")
+        by.seek(0)
+        by.name = "banner.png"
+        return by
+
+
+    def old(self):
+        w, h = 1920, 768
+        title_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 80)
+        art_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 55)
+        time_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 36)
+
+        track_cov = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        banner = (
+            track_cov.resize((w, w))
+            .crop((0, (w - h) // 2, w, ((w - h) // 2) + h))
+            .filter(ImageFilter.GaussianBlur(radius=14))
+        )
+        banner = ImageEnhance.Brightness(banner).enhance(0.3)
+
+        track_cov = track_cov.resize((banner.size[1] - 150, banner.size[1] - 150))
+        mask = Image.new("L", track_cov.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
+        )
+        track_cov.putalpha(mask)
+        track_cov = track_cov.crop(track_cov.getbbox())
+        banner.paste(track_cov, (75, 75), mask)
+
+        title_lines = textwrap.wrap(self.title, 23)
+        if len(title_lines) > 1:
+            title_lines[1] = (
+                title_lines[1] + "..." if len(title_lines) > 2 else title_lines[1]
+            )
+        title_lines = title_lines[:2]
+        artists_lines = textwrap.wrap("".join(self.artists), width=40)
+        if len(artists_lines) > 1:
+            for index, art in enumerate(artists_lines):
+                if "•" in art[-2:]:
+                    artists_lines[index] = art[: art.rfind(", ") - 1]
+
+        draw = ImageDraw.Draw(banner)
+        x, y = 150 + track_cov.size[0], 110
+        for index, line in enumerate(title_lines):
+            draw.text((x, y), line, font=title_font, fill="#FFFFFF")
+            if index != len(title_lines) - 1:
+                y += 70
+        x, y = 150 + track_cov.size[0], 110 * 2
+        if len(title_lines) > 1:
+            y += 70
+        for index, line in enumerate(artists_lines):
+            draw.text((x, y), line, font=art_font, fill="#A0A0A0")
+            if index != len(artists_lines) - 1:
+                y += 50
+
+        draw.rounded_rectangle(
+            [768, 650, 768 + 1072, 650 + 15], radius=15 // 2, fill="#A0A0A0"
+        )
+        draw.rounded_rectangle(
+            [768, 650, 768 + int(1072 * (self.progress / self.duration)), 650 + 15],
+            radius=15 // 2,
+            fill="#FFFFFF",
+        )
+        draw.text(
+            (768, 600),
+            f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}",
+            font=time_font,
+            fill="#FFFFFF",
+        )
+        draw.text(
+            (1745, 600),
+            f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}",
+            font=time_font,
+            fill="#FFFFFF",
+        )
+
+        by = io.BytesIO()
+        banner.save(by, format="PNG")
+        by.seek(0)
+        by.name = "banner.png"
+        return by
 
 @loader.tds
 class SpotifyMod(loader.Module):
@@ -164,8 +342,8 @@ class SpotifyMod(loader.Module):
         ),
         "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL not found... Check config or install spotdl (<code>{}terminal pip install spotdl</code>)</b>",
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Download failed</b>",
-        "gen_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Generating banner...</i>",
-        "dl_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
+        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Uploading banner...</i>",
+        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
     }
 
     strings_ru = {
@@ -282,8 +460,8 @@ class SpotifyMod(loader.Module):
         ),
         "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL не найден... Проверьте конфиг или установите spotdl (<code>{}terminal pip install spotdl</code>)</b>",
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Ошибка скачивания.</b>",
-        "gen_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Генерация баннера...</i>",
-        "dl_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
+        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Загрузка баннера...</i>",
+        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
     }
 
     def __init__(self):
@@ -332,6 +510,12 @@ class SpotifyMod(loader.Module):
                 "~/.local/bin/spotdl",
                 "Path to spotdl binary",
                 validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
+                "banner_version",
+                "new",
+                lambda: "Banner version",
+                validator=loader.validators.Choice(["old", "new"]),
             ),
         )
 
@@ -779,19 +963,20 @@ class SpotifyMod(loader.Module):
 
         if self.config["show_banner"]:
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
-            cover_bytes = await utils.run_sync(requests.get, cover_url)
 
-            tmp_msg = await utils.answer(message, text + self.strings("gen_banner"))
+            tmp_msg = await utils.answer(message, text + self.strings("uploading_banner"))
 
-            banner_file = await utils.run_sync(
-                self._create_banner,
+            banners = Banners(
                 title=track,
-                artists=[a["name"] for a in current_playback["item"]["artists"]],
+                artists=artists,
                 duration=duration_ms,
                 progress=progress_ms,
-                track_cover=cover_bytes.content,
+                track_cover=requests.get(cover_url).content,
+                font=self.config["font"],
             )
-            await utils.answer(tmp_msg, text, file=banner_file)
+            file = getattr(banners, self.config["banner_version"], banners.new)()
+            
+            await utils.answer(tmp_msg, text, file=file)
         else:
             await utils.answer(message, text)
 
@@ -857,7 +1042,7 @@ class SpotifyMod(loader.Module):
             playlist_owner=playlist_owner or "",
         )
 
-        msg = await utils.answer(message, text + self.strings("dl_track"))
+        msg = await utils.answer(message, text + self.strings("downloading_track"))
         
         proc = await asyncio.create_subprocess_shell(
             f'{self.config["spotdl_path"]} {spotify_url}',
@@ -911,7 +1096,7 @@ class SpotifyMod(loader.Module):
             if not search_results or track_number <= 0 or track_number > len(search_results):
                 raise ValueError
 
-            msg = await utils.answer(message, self.strings("dl_track"))
+            msg = await utils.answer(message, self.strings("downloading_track"))
             
             track_info = search_results[track_number - 1]
             track_name = track_info["name"]
