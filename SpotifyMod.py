@@ -18,16 +18,18 @@ import contextlib
 import functools
 import io
 import logging
+import re
 import textwrap
 import time
 import traceback
 import os
-import subprocess
 from types import FunctionType
 
 import requests
 import spotipy
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from telethon.errors import FloodWaitError
+from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.types import Message
 
 from .. import loader, utils
@@ -344,6 +346,15 @@ class SpotifyMod(loader.Module):
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Download failed</b>",
         "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Uploading banner...</i>",
         "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
+        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>No playlists found.</b>",
+        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>Your playlists:</b>\n\n{}",
+        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Added {} to {}</b>",
+        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Removed {} from {}</b>",
+        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid playlist number.</b>",
+        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Use .splaylists first.</b>",
+        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>Playlist {} created.</b>",
+        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>Playlist {} deleted.</b>",
+        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a playlist name.</b>",
     }
 
     strings_ru = {
@@ -462,6 +473,15 @@ class SpotifyMod(loader.Module):
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Ошибка скачивания.</b>",
         "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Загрузка баннера...</i>",
         "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
+        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Плейлисты не найдены.</b>",
+        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>Ваши плейлисты:</b>\n\n{}",
+        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} добавлен в {}</b>",
+        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} удален из {}</b>",
+        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>Неверный номер плейлиста.</b>",
+        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Сначала используйте .splaylists.</b>",
+        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>Плейлист {} создан.</b>",
+        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>Плейлист {} удален.</b>",
+        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
     }
 
     def __init__(self):
@@ -469,8 +489,8 @@ class SpotifyMod(loader.Module):
         self._client_secret = "80c927166c664ee98a43a2c0e2981b4a"
         self.scope = (
             "user-read-playback-state playlist-read-private playlist-read-collaborative"
-            " app-remote-control user-modify-playback-state user-library-modify"
-            " user-library-read"
+            " user-modify-playback-state user-library-modify"
+            " playlist-modify-public playlist-modify-private"
         )
         self.sp_auth = spotipy.oauth2.SpotifyOAuth(
             client_id=self._client_id,
@@ -532,9 +552,6 @@ class SpotifyMod(loader.Module):
         if self.get("autobio", False):
             self.autobio.start()
 
-        with contextlib.suppress(Exception):
-            await utils.dnd(client, "@DirectLinkGenerator_Bot", archive=True)
-
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
@@ -567,78 +584,6 @@ class SpotifyMod(loader.Module):
 
         return wrapped
 
-    def _create_banner(
-        self,
-        title: str, artists: list,
-        duration: int, progress: int,
-        track_cover: bytes,
-    ):
-        W, H = 1920, 768
-        title_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["font"]
-        ).content), 80)
-        artist_font_nl = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["font"]
-        ).content), 55)
-        time_font = ImageFont.truetype(io.BytesIO(requests.get(
-            self.config["font"]
-        ).content), 36)
-        def measure(t: str, f: ImageFont.FreeTypeFont, d: ImageDraw.ImageDraw):
-            bb = d.textbbox((0, 0), t, font=f)
-            return bb[2] - bb[0], bb[3] - bb[1]
-
-        track_cov = Image.open(io.BytesIO(track_cover)).convert("RGBA")
-        banner = (
-            track_cov.resize((W, W))
-            .crop((0, (W-H) // 2, W, ((W-H) // 2) + H))
-            .filter(ImageFilter.GaussianBlur(radius=14))
-        )
-        banner = ImageEnhance.Brightness(banner).enhance(0.3)
-        draw = ImageDraw.Draw(banner)
-
-        track_cov = track_cov.resize((H-350, H-350))
-        mask = Image.new("L", track_cov.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle(
-            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
-        )
-        track_cov.putalpha(mask)
-        track_cov = track_cov.crop(track_cov.getbbox())
-        banner.paste(track_cov, (175, 175), mask)
-
-        x1, y1, x2, y2 = 643, 175, 1887, 593
-        aw, ah = x2-x1, y2-y1
-        tls = textwrap.wrap(title, width=23)
-        if len(tls) > 2:
-            tls = tls[:2]
-            tls[-1] = tls[-1][:-1]+"…"
-        als = textwrap.wrap(', '.join(artists), width=30)
-        if len(als) > 1:
-            als = als[:1]
-            als[-1] = als[-1][:-1]+"…"
-        lines = tls+als
-        lsizes = [measure(l, artist_font_nl if (i==(len(lines)-1)) else title_font_nl, draw) for i, l in enumerate(lines)]
-        hs = [h for _, h in lsizes]
-        spacing = title_font_nl.size+10
-        th = sum(hs) + spacing
-        y_start = y1 + (ah-th) / 2
-        for i, line in enumerate(lines):
-            w, _ = lsizes[i]
-            draw.text((x1 + (aw-w) / 2, y_start), line, font=(artist_font_nl if (i==(len(lines)-1)) else title_font_nl), fill="#FFFFFF")
-            y_start += spacing
-
-        draw.text((75, 650), f"{(progress//1000//60):02}:{(progress//1000%60):02}", font=time_font, fill="#FFFFFF")
-        draw.text((1745, 650), f"{(duration//1000//60):02}:{(duration//1000%60):02}", font=time_font, fill="#FFFFFF")
-        draw.rounded_rectangle([75, 700, 1846, 715], radius=15//2, fill="#A0A0A0")
-        draw.rounded_rectangle(
-            [75, 700, 75 + int(progress / duration * 1846), 715], radius=15//2, fill="#FFFFFF"
-        )
-
-        by = io.BytesIO()
-        banner.save(by, format="PNG")
-        by.seek(0)
-        by.name = "banner.png"
-        return by
-
 
     @loader.loop(interval=90)
     async def autobio(self):
@@ -659,6 +604,172 @@ class SpotifyMod(loader.Module):
             logger.info(f"Sleeping {max(e.seconds, 60)} bc of floodwait")
             await asyncio.sleep(max(e.seconds, 60))
             return
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ➕ Добавить текущий трек в плейлист (используйте номер из .splaylists)"
+    )
+    async def splaylistadd(self, message: Message):
+        """- ➕ Add current track to playlist (use number from .splaylists)"""
+        args = utils.get_args_raw(message)
+        if not args or not args.isdigit():
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+        
+        index = int(args) - 1
+        playlists = self.get("last_playlists", [])
+        
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+            
+        current = self.sp.current_playback()
+        if not current or not current.get("item"):
+            await utils.answer(message, self.strings("no_music"))
+            return
+            
+        track_uri = current["item"]["uri"]
+        track_name = current["item"]["name"]
+        artists = ", ".join([a["name"] for a in current["item"]["artists"]])
+        full_track_name = f"{artists} - {track_name}"
+        
+        playlist_id = playlists[index]["id"]
+        playlist_name = playlists[index]["name"]
+        
+        try:
+            self.sp.playlist_add_items(playlist_id, [track_uri])
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 403 and "Insufficient client scope" in str(e):
+                await utils.answer(message, self.strings("need_auth"))
+                return
+            raise e
+        
+        await utils.answer(message, self.strings("added_to_playlist").format(utils.escape_html(full_track_name), utils.escape_html(playlist_name)))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- ➖ Удалить текущий трек из плейлиста (используйте номер из .splaylists)"
+    )
+    async def splaylistrem(self, message: Message):
+        """- ➖ Remove current track from playlist (use number from .splaylists)"""
+        args = utils.get_args_raw(message)
+        if not args or not args.isdigit():
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+        
+        index = int(args) - 1
+        playlists = self.get("last_playlists", [])
+        
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+            
+        current = self.sp.current_playback()
+        if not current or not current.get("item"):
+            await utils.answer(message, self.strings("no_music"))
+            return
+            
+        track_uri = current["item"]["uri"]
+        track_name = current["item"]["name"]
+        artists = ", ".join([a["name"] for a in current["item"]["artists"]])
+        full_track_name = f"{artists} - {track_name}"
+        
+        playlist_id = playlists[index]["id"]
+        playlist_name = playlists[index]["name"]
+        
+        try:
+            self.sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 403 and "Insufficient client scope" in str(e):
+                await utils.answer(message, self.strings("need_auth"))
+                return
+            raise e
+        
+        await utils.answer(message, self.strings("removed_from_playlist").format(utils.escape_html(full_track_name), utils.escape_html(playlist_name)))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🆕 Создать новый плейлист"
+    )
+    async def splaylistcreate(self, message: Message):
+        """- 🆕 Create a new playlist"""
+        name = utils.get_args_raw(message)
+        if not name:
+            await utils.answer(message, self.strings("no_playlist_name"))
+            return
+        
+        user_id = self.sp.me()["id"]
+        self.sp.user_playlist_create(user_id, name)
+        await utils.answer(message, self.strings("playlist_created").format(utils.escape_html(name)))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🗑 Удалить плейлист (используйте номер из .splaylists)"
+    )
+    async def splaylistdelete(self, message: Message):
+        """- 🗑 Delete playlist (use number from .splaylists)"""
+        args = utils.get_args_raw(message)
+        if not args or not args.isdigit():
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+        
+        index = int(args) - 1
+        playlists = self.get("last_playlists", [])
+        
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
+            
+        playlist_id = playlists[index]["id"]
+        playlist_name = playlists[index]["name"]
+        
+        self.sp.current_user_unfollow_playlist(playlist_id)
+        await utils.answer(message, self.strings("playlist_deleted").format(utils.escape_html(playlist_name)))
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 📃 Получить все плейлисты"
+    )
+    async def splaylists(self, message: Message):
+        """- 📃 Get all playlists"""
+        user_id = self.sp.me()["id"]
+        playlists = self.sp.current_user_playlists()
+        
+        editable_playlists = []
+        for playlist in playlists["items"]:
+            if playlist["owner"]["id"] == user_id or playlist["collaborative"]:
+                editable_playlists.append(playlist)
+        
+        self.set("last_playlists", editable_playlists)
+
+        playlist_list_text = ""
+        for i, playlist in enumerate(editable_playlists):
+            name = utils.escape_html(playlist["name"])
+            url = playlist["external_urls"]["spotify"]
+            count = playlist["tracks"]["total"]
+            playlist_list_text += f"<b>{i + 1}.</b> <a href='{url}'>{name}</a> ({count} tracks)\n"
+
+        if not playlist_list_text:
+            await utils.answer(message, self.strings("no_playlists"))
+        else:
+            await utils.answer(message, self.strings("playlists_list").format(playlist_list_text))
 
     @error_handler
     @tokenized
