@@ -27,7 +27,7 @@ from types import FunctionType
 
 import requests
 import spotipy
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from telethon.errors import FloodWaitError
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.types import Message
@@ -48,177 +48,171 @@ class Banners:
         font
     ):
         self.title = title
-        self.artists = artists
+        self.artists = ", ".join(artists) if isinstance(artists, list) else artists
         self.duration = duration
         self.progress = progress
         self.track_cover = track_cover
-        self.font = font
+        self.font_url = font
 
-    def measure(
-        self, text: str, font: ImageFont.FreeTypeFont, draw: ImageDraw.ImageDraw
-    ):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+    def _get_font(self, size, font_bytes):
+        return ImageFont.truetype(io.BytesIO(font_bytes), size)
 
+    def _prepare_cover(self, size, radius):
+        cover = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        cover = cover.resize((size, size), Image.Resampling.LANCZOS)
+        
+        mask = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle((0, 0, size, size), radius=radius, fill=255)
+        
+        output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        output.paste(cover, (0, 0), mask=mask)
+        return output
 
-    def new(self):
-        W, H = 1920, 768
-        title_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 80)
-        artist_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 55)
-        time_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 36)
+    def _prepare_background(self, w, h):
+        bg = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        bg = bg.resize((w, h), Image.Resampling.BICUBIC)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=40))
+        bg = ImageEnhance.Brightness(bg).enhance(0.4) 
+        return bg
 
-        track_cov = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
-        banner = (
-            track_cov.resize((W, W))
-            .crop((0, (W - H) // 2, W, ((W - H) // 2) + H))
-            .filter(ImageFilter.GaussianBlur(radius=14))
+    def _draw_progress_bar(self, draw, x, y, w, h, progress_pct, color="white", bg_color="#5e5e5e"):
+        draw.rounded_rectangle((x, y, x + w, y + h), radius=h/2, fill=bg_color)
+        
+        fill_w = int(w * progress_pct)
+        if fill_w > 0:
+            draw.rounded_rectangle((x, y, x + fill_w, y + h), radius=h/2, fill=color)
+
+        dot_radius = h * 1.2
+        dot_x = x + fill_w
+        dot_y = y + (h / 2)
+        
+        draw.ellipse(
+            (dot_x - dot_radius, dot_y - dot_radius, dot_x + dot_radius, dot_y + dot_radius),
+            fill=color
         )
-        banner = ImageEnhance.Brightness(banner).enhance(0.3)
-        draw = ImageDraw.Draw(banner)
 
-        track_cov = track_cov.resize((H - 250, H - 250))
-        mask = Image.new("L", track_cov.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle(
-            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
-        )
-        track_cov.putalpha(mask)
-        track_cov = track_cov.crop(track_cov.getbbox())
-        banner.paste(track_cov, (75, 75), mask)
+    def horizontal(self):
+        W, H = 1500, 600
+        padding = 60
+        cover_size = 480
+        
+        font_bytes = requests.get(self.font_url).content
+        title_font = self._get_font(55, font_bytes)
+        artist_font = self._get_font(45, font_bytes)
+        time_font = self._get_font(25, font_bytes)
 
-        space = (643, 75, 1870, 593)
-        title_lines = textwrap.wrap(self.title, width=23)
-        if len(title_lines) > 2:
-            title_lines = title_lines[:2]
-            title_lines[-1] = title_lines[-1][:-1] + "…"
-        artist_lines = textwrap.wrap("".join(self.artists), width=23)
-        if len(artist_lines) > 1:
-            artist_lines = artist_lines[:1]
-            artist_lines[-1] = artist_lines[-1][:-1] + "…"
-        lines = title_lines + artist_lines
-        lines_sizes = [
-            self.measure(
-                line, artist_font if (i == len(lines)-1) else title_font, draw
-            )
-            for i, line in enumerate(lines)
-        ]
-        total_sizes = [sum(w for w, _ in lines_sizes), sum(h for _, h in lines_sizes)]
-        spacing = title_font.size + 10
-        y_start = space[1] + ((space[3]-space[1]-total_sizes[1]) / 2)
-        for i, line in enumerate(lines):
-            w, _ = lines_sizes[i]
-            draw.text(
-                (space[0] + (space[2]-space[0]-w) / 2, y_start),
-                line,
-                font=(artist_font if (i == (len(lines)-1)) else title_font),
-                fill="#FFFFFF",
-            )
-            y_start += spacing
+        img = self._prepare_background(W, H)
+        draw = ImageDraw.Draw(img)
+        
+        cover = self._prepare_cover(cover_size, 30)
+        img.paste(cover, (padding, (H - cover_size) // 2), cover)
 
-        draw.text(
-            (75, 650),
-            f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}",
-            font=time_font,
-            fill="#FFFFFF",
-        )
-        draw.text(
-            (1745, 650),
-            f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}",
-            font=time_font,
-            fill="#FFFFFF",
-        )
-        draw.rounded_rectangle([75, 700, 1845, 715], radius=15 // 2, fill="#A0A0A0")
-        draw.rounded_rectangle(
-            [75, 700, int(75 + (1770 * self.progress / self.duration)), 715],
-            radius=15 // 2,
-            fill="#FFFFFF",
-        )
+        text_x = padding + cover_size + 60
+        text_y_start = 100
+        text_width_limit = W - text_x - padding
+
+        display_title = self.title
+        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
+            display_title = display_title[:-1]
+        if len(display_title) < len(self.title): display_title += "…"
+
+        display_artist = self.artists
+        while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
+            display_artist = display_artist[:-1]
+        if len(display_artist) < len(self.artists): display_artist += "…"
+
+        draw.text((text_x, text_y_start), display_title, font=title_font, fill="white")
+        draw.text((text_x, text_y_start + 70), display_artist, font=artist_font, fill="#B3B3B3")
+
+        cur_time = f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}"
+        dur_time = f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}"
+        
+        cur_w = time_font.getlength(cur_time)
+        dur_w = time_font.getlength(dur_time)
+        
+        bar_y = 480
+        bar_h = 8
+        gap = 25
+        
+        draw.text((text_x, bar_y - 12), cur_time, font=time_font, fill="white")
+        
+        bar_start_x = text_x + cur_w + gap
+        bar_end_x = text_x + text_width_limit - dur_w - gap
+        bar_w = bar_end_x - bar_start_x
+        
+        prog_pct = self.progress / self.duration if self.duration > 0 else 0
+        self._draw_progress_bar(draw, bar_start_x, bar_y, bar_w, bar_h, prog_pct)
+        
+        draw.text((bar_end_x + gap, bar_y - 12), dur_time, font=time_font, fill="white")
 
         by = io.BytesIO()
-        banner.save(by, format="PNG")
+        img.save(by, format="PNG")
         by.seek(0)
         by.name = "banner.png"
         return by
 
+    def vertical(self):
+        W, H = 1000, 1500
+        padding = 80
+        cover_size = 800
+        
+        font_bytes = requests.get(self.font_url).content
+        title_font = self._get_font(60, font_bytes)
+        artist_font = self._get_font(45, font_bytes)
+        time_font = self._get_font(35, font_bytes)
 
-    def old(self):
-        w, h = 1920, 768
-        title_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 80)
-        art_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 55)
-        time_font = ImageFont.truetype(io.BytesIO(requests.get(self.font).content), 36)
+        img = self._prepare_background(W, H)
+        draw = ImageDraw.Draw(img)
 
-        track_cov = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
-        banner = (
-            track_cov.resize((w, w))
-            .crop((0, (w - h) // 2, w, ((w - h) // 2) + h))
-            .filter(ImageFilter.GaussianBlur(radius=14))
-        )
-        banner = ImageEnhance.Brightness(banner).enhance(0.3)
+        cover = self._prepare_cover(cover_size, 40)
+        cover_x = (W - cover_size) // 2
+        cover_y = 120
+        img.paste(cover, (cover_x, cover_y), cover)
 
-        track_cov = track_cov.resize((banner.size[1] - 150, banner.size[1] - 150))
-        mask = Image.new("L", track_cov.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle(
-            (0, 0, track_cov.size[0], track_cov.size[1]), radius=35, fill=255
-        )
-        track_cov.putalpha(mask)
-        track_cov = track_cov.crop(track_cov.getbbox())
-        banner.paste(track_cov, (75, 75), mask)
+        text_area_y = cover_y + cover_size + 120
+        text_width_limit = W - (padding * 2)
 
-        title_lines = textwrap.wrap(self.title, 23)
-        if len(title_lines) > 1:
-            title_lines[1] = (
-                title_lines[1] + "..." if len(title_lines) > 2 else title_lines[1]
-            )
-        title_lines = title_lines[:2]
-        artists_lines = textwrap.wrap("".join(self.artists), width=40)
-        if len(artists_lines) > 1:
-            for index, art in enumerate(artists_lines):
-                if "•" in art[-2:]:
-                    artists_lines[index] = art[: art.rfind(", ") - 1]
+        display_title = self.title
+        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
+            display_title = display_title[:-1]
+        if len(display_title) < len(self.title): display_title += "…"
 
-        draw = ImageDraw.Draw(banner)
-        x, y = 150 + track_cov.size[0], 110
-        for index, line in enumerate(title_lines):
-            draw.text((x, y), line, font=title_font, fill="#FFFFFF")
-            if index != len(title_lines) - 1:
-                y += 70
-        x, y = 150 + track_cov.size[0], 110 * 2
-        if len(title_lines) > 1:
-            y += 70
-        for index, line in enumerate(artists_lines):
-            draw.text((x, y), line, font=art_font, fill="#A0A0A0")
-            if index != len(artists_lines) - 1:
-                y += 50
+        display_artist = self.artists
+        while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
+            display_artist = display_artist[:-1]
+        if len(display_artist) < len(self.artists): display_artist += "…"
 
-        draw.rounded_rectangle(
-            [768, 650, 768 + 1072, 650 + 15], radius=15 // 2, fill="#A0A0A0"
-        )
-        draw.rounded_rectangle(
-            [768, 650, 768 + int(1072 * (self.progress / self.duration)), 650 + 15],
-            radius=15 // 2,
-            fill="#FFFFFF",
-        )
-        draw.text(
-            (768, 600),
-            f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}",
-            font=time_font,
-            fill="#FFFFFF",
-        )
-        draw.text(
-            (1745, 600),
-            f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}",
-            font=time_font,
-            fill="#FFFFFF",
-        )
+        title_w = title_font.getlength(display_title)
+        draw.text(((W - title_w) / 2, text_area_y), display_title, font=title_font, fill="white")
+
+        artist_w = artist_font.getlength(display_artist)
+        draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#B3B3B3")
+
+        bar_y = text_area_y + 260
+        bar_h = 8
+        bar_w = W - (padding * 2)
+        prog_pct = self.progress / self.duration if self.duration > 0 else 0
+        
+        self._draw_progress_bar(draw, padding, bar_y, bar_w, bar_h, prog_pct, color="white", bg_color="#5e5e5e")
+
+        cur_time = f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}"
+        dur_time = f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}"
+        
+        draw.text((padding, bar_y + 40), cur_time, font=time_font, fill="#B3B3B3")
+        
+        dur_w = time_font.getlength(dur_time)
+        draw.text((W - padding - dur_w, bar_y + 40), dur_time, font=time_font, fill="#B3B3B3")
 
         by = io.BytesIO()
-        banner.save(by, format="PNG")
+        img.save(by, format="PNG")
         by.seek(0)
         by.name = "banner.png"
         return by
 
 @loader.tds
 class SpotifyMod(loader.Module):
-    """Card with the currently playing track on Spotify. Idea: t.me/fuccsoc. Implementation: t.me/hikariatama. Developer channel: t.me/hikarimods. Banners from YaMusic by @kamekuro_hmods"""
+    """Card with the currently playing track on Spotify."""
 
     strings = {
         "name": "SpotifyMod",
@@ -358,7 +352,7 @@ class SpotifyMod(loader.Module):
     }
 
     strings_ru = {
-        "_cls_doc": "Карточка с играющим треком в Spotify. Идея: t.me/fuccsoc. Разработка: t.me/hikariatama. Канал разработчика: t.me/hikarimods. Баннеры из YaMusic от @kamekuro_hmods",
+        "_cls_doc": "Карточка с играющим треком в Spotify.",
         "need_auth": (
             "<emoji document_id=5778527486270770928>❌</emoji> <b>Выполни"
             " </b><code>.sauth</code><b> перед выполнением этого действия.</b>"
@@ -483,6 +477,125 @@ class SpotifyMod(loader.Module):
         "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>Плейлист {} удален.</b>",
         "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
     }
+    strings_jp = {
+        "_cls_doc": "Spotify からのメッセージ",
+        "need_auth": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>この操作を行う前に "
+            "</b><code>.sauth</code><b> を実行してください。</b>"
+        ),
+        "on-repeat": (
+            "<emoji document_id=5258420634785947640>🔄</emoji> <b>リピート再生を設定しました。</b>"
+        ),
+        "off-repeat": (
+            "<emoji document_id=5260687119092817530>🔄</emoji> <b>リピート再生を解除しました。</b>"
+        ),
+        "skipped": (
+            "<emoji document_id=6037622221625626773>➡️</emoji> <b>スキップしました。</b>"
+        ),
+        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>再生中...</b>",
+        "back": (
+            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>前のトラックに戻りました。</b>"
+        ),
+        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>一時停止</b>",
+        "restarted": (
+            "<emoji document_id=5843596438373667352>✅️</emoji> <b>最初から再生します。</b>"
+        ),
+        "liked": (
+            "<emoji document_id=5258179403652801593>❤️</emoji> <b>お気に入りに追加しました。</b>"
+        ),
+        "unlike": (
+            "<emoji document_id=5774077015388852135>❌</emoji>"
+            " <b>お気に入りから削除しました。</b>"
+        ),
+        "err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>エラーが発生しました。"
+            "</b>\n<code>{}</code>"
+        ),
+        "already_authed": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>既に認証されています。</b>"
+        ),
+        "authed": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>認証に成功しました。</b>"
+        ),
+        "deauth": (
+            "<emoji document_id=5877341274863832725>🚪</emoji> <b>ログアウトしました。</b>"
+        ),
+        "auth": (
+            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">リンクをクリック</a>してアクセスを許可し、取得したURLを使って <code>.scode https://...</code> を入力してください。'
+        ),
+        "no_music": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>音楽は再生されていません！</b>"
+        ),
+        "dl_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>トラックのダウンロードに失敗しました。</b>"
+        ),
+        "volume_changed": (
+            "<emoji document_id=5890997763331591703>🔊</emoji>"
+            " <b>音量を {}% に変更しました。</b>"
+        ),
+        "volume_invalid": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>音量は0から100の数字で指定してください。</b>"
+        ),
+        "volume_err": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>音量の変更中にエラーが発生しました。</b>"
+        ),
+        "no_volume_arg": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>0から100の間で音量を指定してください。</b>"
+        ),
+        "searching_tracks": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>{} を検索中...</b>"
+        ),
+        "no_search_query": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>検索キーワードを指定してください。</b>"
+        ),
+        "no_tracks_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>{} は見つかりませんでした。</b>"
+        ),
+        "search_results": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>{} の検索結果:</b>\n\n{}"
+        ),
+        "downloading_search_track": (
+            "<emoji document_id=5841359499146825803>🕔</emoji> <b>{} をダウンロード中...</b>"
+        ),
+        "download_success": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>{} - {} のダウンロードに成功しました。</b>"
+        ),
+        "invalid_track_number": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>トラック番号が無効です。"
+            " 先に検索するか、リストから有効な番号を指定してください。</b>"
+        ),
+        "device_list": (
+            "<emoji document_id=5956561916573782596>📄</emoji> <b>利用可能なデバイス:</b>\n{}"
+        ),
+        "no_devices_found": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>デバイスが見つかりません。</b>"
+        ),
+        "device_changed": (
+            "<emoji document_id=5776375003280838798>✅</emoji> <b>再生デバイスを"
+            " {} に切り替えました。</b>"
+        ),
+        "invalid_device_id": (
+            "<emoji document_id=5778527486270770928>❌</emoji> <b>デバイスIDが無効です。"
+            " </b><code>.sdevice</code> <b>で利用可能なデバイスを確認してください。</b>"
+        ),
+        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>検索結果をクリアしました。</b>",
+        "autobio": (
+            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify AutoBio: {}</b>"
+        ),
+        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDLが見つかりません... 設定を確認するか、インストールしてください (<code>{}terminal pip install spotdl</code>)</b>",
+        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>ダウンロードに失敗しました。</b>",
+        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>バナーをアップロード中...</i>",
+        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>トラックをダウンロード中...</i>",
+        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリストが見つかりません。</b>",
+        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>あなたのプレイリスト:</b>\n\n{}",
+        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>{} を {} に追加しました。</b>",
+        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>{} を {} から削除しました。</b>",
+        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリスト番号が無効です。</b>",
+        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>先に .splaylists を使用してください。</b>",
+        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>プレイリスト {} を作成しました。</b>",
+        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>プレイリスト {} を削除しました。</b>",
+        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリスト名を指定してください。</b>",
+    }
 
     def __init__(self):
         self._client_id = "e0708753ab60499c89ce263de9b4f57a"
@@ -533,9 +646,9 @@ class SpotifyMod(loader.Module):
             ),
             loader.ConfigValue(
                 "banner_version",
-                "new",
+                "horizontal",
                 lambda: "Banner version",
-                validator=loader.validators.Choice(["old", "new"]),
+                validator=loader.validators.Choice(["horizontal", "vertical"]),
             ),
         )
 
@@ -1085,7 +1198,7 @@ class SpotifyMod(loader.Module):
                 track_cover=requests.get(cover_url).content,
                 font=self.config["font"],
             )
-            file = getattr(banners, self.config["banner_version"], banners.new)()
+            file = getattr(banners, self.config["banner_version"], banners.horizontal)()
             
             await utils.answer(tmp_msg, text, file=file)
         else:
