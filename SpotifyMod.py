@@ -10,6 +10,21 @@
 # You CANNOT edit, distribute or redistribute this file without direct permission from the author.
 #
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
+
+# =======================================
+#   _  __         __  __           _
+#  | |/ /___     |  \/  | ___   __| |___
+#  | ' // _ \    | |\/| |/ _ \ / _` / __|
+#  | . \  __/    | |  | | (_) | (_| \__ \
+#  |_|\_\___|    |_|  |_|\___/ \__,_|___/
+#           @ke_mods
+# =======================================
+#
+#  LICENSE: CC BY-ND 4.0 (Attribution-NoDerivatives 4.0 International)
+#  --------------------------------------
+#  https://creativecommons.org/licenses/by-nd/4.0/legalcode
+# =======================================
+
 # meta developer: @ke_mods
 # requires: telethon spotipy pillow requests spotdl
 

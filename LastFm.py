@@ -17,6 +17,20 @@
 # meta pic: https://envs.sh/Hob.webp
 # ---------------------------------------------------------------------------------
 
+# =======================================
+#   _  __         __  __           _
+#  | |/ /___     |  \/  | ___   __| |___
+#  | ' // _ \    | |\/| |/ _ \ / _` / __|
+#  | . \  __/    | |  | | (_) | (_| \__ \
+#  |_|\_\___|    |_|  |_|\___/ \__,_|___/
+#           @ke_mods
+# =======================================
+#
+#  LICENSE: CC BY-ND 4.0 (Attribution-NoDerivatives 4.0 International)
+#  --------------------------------------
+#  https://creativecommons.org/licenses/by-nd/4.0/legalcode
+# =======================================
+
 # Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
 
 from .. import loader, utils 
