@@ -26,7 +26,7 @@
 # =======================================
 
 # meta developer: @ke_mods
-# requires: telethon spotipy pillow requests spotdl
+# requires: telethon spotipy pillow requests yt-dlp
 
 import asyncio
 import contextlib
@@ -351,7 +351,7 @@ class SpotifyMod(loader.Module):
         "autobio": (
             "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify autobio {}</b>"
         ),
-        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL not found... Check config or install spotdl (<code>{}terminal pip install spotdl</code>)</b>",
+        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlp not found... Check config or install yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Download failed</b>",
         "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Uploading banner...</i>",
         "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
@@ -478,7 +478,7 @@ class SpotifyMod(loader.Module):
             "<emoji document_id=6319076999105087378>🎧</emoji> <b>Обновление био"
             " включено {}</b>"
         ),
-        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDL не найден... Проверьте конфиг или установите spotdl (<code>{}terminal pip install spotdl</code>)</b>",
+        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlp не найден... Проверьте конфиг или установите yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Ошибка скачивания.</b>",
         "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Загрузка баннера...</i>",
         "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
@@ -597,7 +597,7 @@ class SpotifyMod(loader.Module):
         "autobio": (
             "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify AutoBio: {}</b>"
         ),
-        "no_spotdl": "<emoji document_id=5778527486270770928>❌</emoji> <b>SpotDLが見つかりません... 設定を確認するか、インストールしてください (<code>{}terminal pip install spotdl</code>)</b>",
+        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlpが見つかりません... 設定を確認するか、インストールしてください (<code>{}terminal pip install yt-dlp</code>)</b>",
         "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>ダウンロードに失敗しました。</b>",
         "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>バナーをアップロード中...</i>",
         "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>トラックをダウンロード中...</i>",
@@ -654,9 +654,9 @@ class SpotifyMod(loader.Module):
                 lambda: "Template for Spotify AutoBio",
             ),
             loader.ConfigValue(
-                "spotdl_path",
-                "~/.local/bin/spotdl",
-                "Path to spotdl binary",
+                "ytdlp_path",
+                "",
+                "Path to ytdlp binary",
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
@@ -732,6 +732,54 @@ class SpotifyMod(loader.Module):
             logger.info(f"Sleeping {max(e.seconds, 60)} bc of floodwait")
             await asyncio.sleep(max(e.seconds, 60))
             return
+    
+    async def _download_track(self, message, query: str, caption: str = ""):
+        dl_dir = os.path.join(os.getcwd(), "spotifymod")
+        if not os.path.exists(dl_dir):
+            os.makedirs(dl_dir, exist_ok=True)
+        
+        for f in os.listdir(dl_dir):
+            try:
+                os.remove(os.path.join(dl_dir, f))
+            except:
+                pass
+
+        try:
+            squery = query.replace('"', '').replace("'", "")
+
+            cmd = (
+                f'{self.config["ytdlp_path"]} -x --audio-format mp3 --add-metadata '
+                f'-o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
+                f'"ytsearch1:{squery}"'
+            )
+
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await proc.communicate()
+
+            files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
+            
+            if files:
+                target_file = os.path.join(dl_dir, files[0])
+                await utils.answer(message, caption, file=target_file)
+            else:
+                await utils.answer(message, self.strings("snowt_failed"))
+
+        except Exception as e:
+            logger.error(e)
+            await utils.answer(message, self.strings("dl_err"))
+        
+        finally:
+            if os.path.exists(dl_dir):
+                for f in os.listdir(dl_dir):
+                    try:
+                        os.remove(os.path.join(dl_dir, f))
+                    except:
+                        pass
+
 
     @error_handler
     @tokenized
@@ -1283,39 +1331,10 @@ class SpotifyMod(loader.Module):
 
         msg = await utils.answer(message, text + self.strings("downloading_track"))
         
-        proc = await asyncio.create_subprocess_shell(
-            f'{self.config["spotdl_path"]} {spotify_url}',
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        _ = await proc.stdout.readline()
-        line = (await proc.stdout.readline()).decode().rstrip()
-        
-        await proc.wait()
-        
-        err = await proc.stderr.readline()
-        if ": not found" in err.decode():
-            await utils.answer(msg, self.strings("no_spotdl").format(self.get_prefix()))
-            return
-
-        try:
-            track_name = f'{artists} - {track}'
-            
-            file_path = track_name + ".mp3"
-
-            if os.path.exists(file_path):
-                await utils.answer(msg, text, file=file_path)
-                os.remove(file_path)
-            else:
-                raise FileNotFoundError("File not found logic triggered")
-
-        except Exception as e:
-            await utils.answer(msg, text + self.strings["snowt_failed"])
-            logger.error(e)
-
+        await self._download_track(msg, f"{artists} {track}", caption=text)
 
     @error_handler
+    @tokenized
     @loader.command(
         ru_doc=(
             "- 🔍 Поиск треков. Например: .ssearch Imagine Dragons Believer\n"
@@ -1332,7 +1351,12 @@ class SpotifyMod(loader.Module):
         try:
             track_number = int(args)
             search_results = self.get("last_search_results", [])
-            if not search_results or track_number <= 0 or track_number > len(search_results):
+            
+            if not search_results:
+                await utils.answer(message, self.strings("no_tracks_found"))
+                return
+
+            if track_number <= 0 or track_number > len(search_results):
                 raise ValueError
 
             msg = await utils.answer(message, self.strings("downloading_track"))
@@ -1340,31 +1364,13 @@ class SpotifyMod(loader.Module):
             track_info = search_results[track_number - 1]
             track_name = track_info["name"]
             artists = ", ".join([a["name"] for a in track_info["artists"]])
-            track_url = track_info["external_urls"]["spotify"]
-
-            proc = await asyncio.create_subprocess_shell(
-                f'{self.config["spotdl_path"]} {track_url}',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            
+            caption_text = self.strings("download_success").format(
+                utils.escape_html(track_name), 
+                utils.escape_html(artists)
             )
             
-            await proc.communicate()
-            
-            file_path = f"{artists} - {track_name}.mp3"
-
-            if os.path.exists(file_path):
-                await utils.answer(
-                    msg,
-                    self.strings["download_success"].format(
-                        track_name,
-                        artists,
-                    ),
-                    file=file_path,
-                )
-                os.remove(file_path)
-            else:
-                await utils.answer(msg, self.strings["snowt_failed"])
-
+            await self._download_track(msg, f"{artists} {track_name}", caption=caption_text)
             return
 
         except ValueError:
@@ -1394,6 +1400,7 @@ class SpotifyMod(loader.Module):
 
             text = "\n".join(tracks_list)
             await utils.answer(message, self.strings("search_results").format(args, text))
+
     
     @loader.command(
         ru_doc="- 🔄 Сброс результатов поиска по трекам"
