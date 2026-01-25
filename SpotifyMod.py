@@ -1,14 +1,3 @@
-#             █ █ ▀ █▄▀ ▄▀█ █▀█ ▀
-#             █▀█ █ █ █ █▀█ █▀▄ █
-#              © Copyright 2022
-#
-#          https://t.me/hikariatama
-#
-# 🔒 Licensed under the GNU AGPLv3
-# 🌐 https://www.gnu.org/licenses/agpl-3.0.html
-#
-# You CANNOT edit, distribute or redistribute this file without direct permission from the author.
-#
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
 
 # =======================================
@@ -60,7 +49,8 @@ class Banners:
         duration: int,
         progress: int,
         track_cover: bytes,
-        font
+        font,
+        blur
     ):
         self.title = title
         self.artists = ", ".join(artists) if isinstance(artists, list) else artists
@@ -68,6 +58,7 @@ class Banners:
         self.progress = progress
         self.track_cover = track_cover
         self.font_url = font
+        self.blur_intensity = blur
 
     def _get_font(self, size, font_bytes):
         return ImageFont.truetype(io.BytesIO(font_bytes), size)
@@ -86,26 +77,17 @@ class Banners:
 
     def _prepare_background(self, w, h):
         bg = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
-        bg = bg.resize((w, h), Image.Resampling.BICUBIC)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=40))
-        bg = ImageEnhance.Brightness(bg).enhance(0.4) 
+        bg = bg.resize((w, h), Image.Resampling.LANCZOS)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=self.blur_intensity))
+        bg = ImageEnhance.Brightness(bg).enhance(0.35) 
         return bg
 
-    def _draw_progress_bar(self, draw, x, y, w, h, progress_pct, color="white", bg_color="#5e5e5e"):
+    def _draw_progress_bar(self, draw, x, y, w, h, progress_pct, color="white", bg_color="#6b6b6b"):
         draw.rounded_rectangle((x, y, x + w, y + h), radius=h/2, fill=bg_color)
         
         fill_w = int(w * progress_pct)
         if fill_w > 0:
             draw.rounded_rectangle((x, y, x + fill_w, y + h), radius=h/2, fill=color)
-
-        dot_radius = h * 1.2
-        dot_x = x + fill_w
-        dot_y = y + (h / 2)
-        
-        draw.ellipse(
-            (dot_x - dot_radius, dot_y - dot_radius, dot_x + dot_radius, dot_y + dot_radius),
-            fill=color
-        )
 
     def horizontal(self):
         W, H = 1500, 600
@@ -138,7 +120,7 @@ class Banners:
         if len(display_artist) < len(self.artists): display_artist += "…"
 
         draw.text((text_x, text_y_start), display_title, font=title_font, fill="white")
-        draw.text((text_x, text_y_start + 70), display_artist, font=artist_font, fill="#B3B3B3")
+        draw.text((text_x, text_y_start + 70), display_artist, font=artist_font, fill="#b3b3b3")
 
         cur_time = f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}"
         dur_time = f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}"
@@ -202,22 +184,22 @@ class Banners:
         draw.text(((W - title_w) / 2, text_area_y), display_title, font=title_font, fill="white")
 
         artist_w = artist_font.getlength(display_artist)
-        draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#B3B3B3")
+        draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#b3b3b3")
 
         bar_y = text_area_y + 260
         bar_h = 8
         bar_w = W - (padding * 2)
         prog_pct = self.progress / self.duration if self.duration > 0 else 0
         
-        self._draw_progress_bar(draw, padding, bar_y, bar_w, bar_h, prog_pct, color="white", bg_color="#5e5e5e")
+        self._draw_progress_bar(draw, padding, bar_y, bar_w, bar_h, prog_pct, color="white", bg_color="#6b6b6b")
 
         cur_time = f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}"
         dur_time = f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}"
         
-        draw.text((padding, bar_y + 40), cur_time, font=time_font, fill="#B3B3B3")
+        draw.text((padding, bar_y + 40), cur_time, font=time_font, fill="white")
         
         dur_w = time_font.getlength(dur_time)
-        draw.text((W - padding - dur_w, bar_y + 40), dur_time, font=time_font, fill="#B3B3B3")
+        draw.text((W - padding - dur_w, bar_y + 40), dur_time, font=time_font, fill="white")
 
         by = io.BytesIO()
         img.save(by, format="PNG")
@@ -639,7 +621,7 @@ class SpotifyMod(loader.Module):
                     "<emoji document_id=6007938409857815902>🎧</emoji> <b>Now playing:</b> {track} — {artists}\n"
                     "<emoji document_id=5877465816030515018>🔗</emoji> <b><a href='{songlink}'>song.link</a></b>"
                 ),
-                """Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders""",
+                "Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders." + "\n\n" + "ℹ️ Custom placeholders: {}".format(utils.config_placeholders()),
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
@@ -664,6 +646,12 @@ class SpotifyMod(loader.Module):
                 "horizontal",
                 lambda: "Banner version",
                 validator=loader.validators.Choice(["horizontal", "vertical"]),
+            ),
+            loader.ConfigValue(
+                "blur_intensity",
+                40,
+                lambda: "Blur intensity",
+                validator=loader.validators.Integer(minimum=0),
             ),
         )
 
@@ -779,8 +767,7 @@ class SpotifyMod(loader.Module):
                         os.remove(os.path.join(dl_dir, f))
                     except:
                         pass
-
-
+                        
     @error_handler
     @tokenized
     @loader.command(
@@ -1235,18 +1222,22 @@ class SpotifyMod(loader.Module):
             playlist_name = ""
             playlist_owner = ""
 
-        text = self.config["custom_text"].format(
-            track=utils.escape_html(track),
-            artists=utils.escape_html(artists),
-            album=utils.escape_html(album_name),
-            duration=duration,
-            progress=progress,
-            device=device,
-            spotify_url=spotify_url,
-            songlink=songlink,
-            playlist=utils.escape_html(playlist_name) if playlist_name else "",
-            playlist_owner=playlist_owner or "",
-        )
+        sdata = {
+            "track": utils.escape_html(track),
+            "artists": utils.escape_html(artists),
+            "album": utils.escape_html(album_name),
+            "duration": duration,
+            "progress": progress,
+            "device": device,
+            "spotify_url": spotify_url,
+            "songlink": songlink,
+            "playlist": utils.escape_html(playlist_name) if playlist_name else "",
+            "playlist_owner": playlist_owner or "",
+        }
+        
+        data = await utils.get_placeholders(sdata, self.config["custom_text"])
+        
+        text = self.config["custom_text"].format(**data)
 
         if self.config["show_banner"]:
             cover_url = current_playback["item"]["album"]["images"][0]["url"]
@@ -1260,6 +1251,7 @@ class SpotifyMod(loader.Module):
                 progress=progress_ms,
                 track_cover=requests.get(cover_url).content,
                 font=self.config["font"],
+                blur=self.config["blur_intensity"]
             )
             file = getattr(banners, self.config["banner_version"], banners.horizontal)()
             
@@ -1316,18 +1308,22 @@ class SpotifyMod(loader.Module):
             playlist_name = ""
             playlist_owner = ""
 
-        text = self.config["custom_text"].format(
-            track=utils.escape_html(track),
-            artists=utils.escape_html(artists),
-            album=utils.escape_html(album_name),
-            duration=duration,
-            progress=progress,
-            device=device,
-            spotify_url=spotify_url,
-            songlink=songlink,
-            playlist=utils.escape_html(playlist_name) if playlist_name else "",
-            playlist_owner=playlist_owner or "",
-        )
+        sdata = {
+            "track": utils.escape_html(track),
+            "artists": utils.escape_html(artists),
+            "album": utils.escape_html(album_name),
+            "duration": duration,
+            "progress": progress,
+            "device": device,
+            "spotify_url": spotify_url,
+            "songlink": songlink,
+            "playlist": utils.escape_html(playlist_name) if playlist_name else "",
+            "playlist_owner": playlist_owner or "",
+        }
+        
+        data = await utils.get_placeholders(sdata, self.config["custom_text"])
+        
+        text = self.config["custom_text"].format(**data)
 
         msg = await utils.answer(message, text + self.strings("downloading_track"))
         
