@@ -4,3 +4,4 @@ SpotifyMod
 UnbanAll
 voicetotext
 LastFm
+PicToStories
