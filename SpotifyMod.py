@@ -736,7 +736,7 @@ class SpotifyMod(loader.Module):
             squery = query.replace('"', '').replace("'", "")
 
             cmd = (
-                f'{self.config["ytdlp_path"]} -x --impersonate Chrome-116 --audio-format mp3 --add-metadata '
+                f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
                 f'-o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
                 f'"ytsearch1:{squery}"'
             )
