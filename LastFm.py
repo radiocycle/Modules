@@ -1,22 +1,3 @@
-# ---------------------------------------------------------------------------------
-#░█▀▄░▄▀▀▄░█▀▄░█▀▀▄░█▀▀▄░█▀▀▀░▄▀▀▄░░░█▀▄▀█
-#░█░░░█░░█░█░█░█▄▄▀░█▄▄█░█░▀▄░█░░█░░░█░▀░█
-#░▀▀▀░░▀▀░░▀▀░░▀░▀▀░▀░░▀░▀▀▀▀░░▀▀░░░░▀░░▒▀
-# Name: LastFM
-# Description: Module for music from different services
-# Author: @codrago_m
-# ---------------------------------------------------------------------------------
-# 🔒    Licensed under the GNU AGPLv3
-# 🌐 https://www.gnu.org/licenses/agpl-3.0.html
-# ---------------------------------------------------------------------------------
-# Author: @codrago
-# Commands: nowplay
-# scope: heroku_only
-# meta developer: @ke_mods
-# meta banner: https://raw.githubusercontent.com/coddrago/modules/refs/heads/main/banner.png
-# meta pic: https://envs.sh/Hob.webp
-# ---------------------------------------------------------------------------------
-
 # =======================================
 #   _  __         __  __           _
 #  | |/ /___     |  \/  | ___   __| |___
@@ -31,97 +12,142 @@
 #  https://creativecommons.org/licenses/by-nd/4.0/legalcode
 # =======================================
 
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
+# meta developer: @ke_mods
 
 from .. import loader, utils 
 import requests
 import io
 import textwrap
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
-
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 class Banners:
-    def __init__(self, title, artists, track_cover, font_url):
+    def __init__(
+        self,
+        title: str,
+        artists: list,
+        track_cover: bytes,
+        font
+    ):
         self.title = title
-        self.artists = artists
+        self.artists = ", ".join(artists) if isinstance(artists, list) else artists
         self.track_cover = track_cover
-        self.font_bytes = requests.get(font_url).content
+        self.font_url = font
 
-    def _prepare_base(self):
-        W, H = 1920, 768
-        tf = ImageFont.truetype(io.BytesIO(self.font_bytes), 80)
-        af = ImageFont.truetype(io.BytesIO(self.font_bytes), 55)
-        img = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
-        banner = img.resize((W, W)).crop((0, (W-H)//2, W, ((W-H)//2)+H)).filter(ImageFilter.GaussianBlur(30))
-        banner = ImageEnhance.Brightness(banner).enhance(0.3)
-        cov = img.resize((H - 150, H - 150))
-        mask = Image.new("L", cov.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, *cov.size), radius=35, fill=255)
-        banner.paste(cov, (75, 75), mask)
-        return banner, ImageDraw.Draw(banner), tf, af
+    def _get_font(self, size, font_bytes):
+        return ImageFont.truetype(io.BytesIO(font_bytes), size)
 
-    def measure(self, text, font, draw):
-        b = draw.textbbox((0, 0), text, font=font)
-        return b[2] - b[0], b[3] - b[1]
-
-    def new(self):
-        banner, draw, tf, af = self._prepare_base()
-        lf = ImageFont.truetype(io.BytesIO(self.font_bytes), 40)
-        space = (743, 75, 1870, 693)
-        t_lines = textwrap.wrap(self.title, 23)[:2]
-        if len(t_lines) > 1 and len(textwrap.wrap(self.title, 23)) > 2: t_lines[-1] += "…"
-        a_lines = textwrap.wrap(self.artists, 23)[:1]
-        if len(textwrap.wrap(self.artists, 23)) > 1: a_lines[-1] += "…"
-        content = [
-            *({"t": l, "f": tf, "c": "#FFFFFF"} for l in t_lines),
-            *({"t": l, "f": af, "c": "#FFFFFF"} for l in a_lines),
-            {"t": "last.fm", "f": lf, "c": "#A0A0A0"}
-        ]
-        h_list = [self.measure(i["t"], i["f"], draw)[1] for i in content]
-        total_h = sum(h_list) + 35 * (len(content) - 1)
-        y = space[1] + (space[3] - space[1] - total_h) // 2
-        for i, item in enumerate(content):
-            w, _ = self.measure(item["t"], item["f"], draw)
-            draw.text((space[0] + (space[2] - space[0] - w) / 2, y), item["t"], font=item["f"], fill=item["c"])
-            y += h_list[i] + 35
-
-        return self._save(banner)
-
-    def old(self):
-        banner, draw, tf, af = self._prepare_base()
-        lf = ImageFont.truetype(io.BytesIO(self.font_bytes), 80)
-        t_lines = textwrap.wrap(self.title, 23)[:2]
-        if len(textwrap.wrap(self.title, 23)) > 2: t_lines[1] += "..."
-        a_lines = textwrap.wrap(self.artists, 40)
-        a_lines = [x[:x.rfind(", ")-1] if "•" in x[-2:] else x for x in a_lines]
-        y = 110
-        for i, l in enumerate(t_lines):
-            draw.text((150 + (768 - 150), y), l, font=tf, fill="#FFFFFF")
-            y += 70 if i != len(t_lines)-1 else 0
+    def _prepare_cover(self, size, radius):
+        cover = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        cover = cover.resize((size, size), Image.Resampling.LANCZOS)
         
-        y = 110 * 2 + (70 if len(t_lines) > 1 else 0)
-        for i, l in enumerate(a_lines):
-            draw.text((150 + (768 - 150), y), l, font=af, fill="#A0A0A0")
-            y += 50
+        mask = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle((0, 0, size, size), radius=radius, fill=255)
+        
+        output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        output.paste(cover, (0, 0), mask=mask)
+        return output
 
-        draw.text((768, 578), "last.fm", font=lf, fill="#FFFFFF")
-        return self._save(banner)
+    def _prepare_background(self, w, h):
+        bg = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
+        bg = bg.resize((w, h), Image.Resampling.BICUBIC)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=20))
+        bg = ImageEnhance.Brightness(bg).enhance(0.4) 
+        return bg
 
-    def _save(self, img):
-        out = io.BytesIO()
-        img.save(out, format="PNG")
-        out.seek(0)
-        out.name = "banner.png"
-        return out
+    def horizontal(self):
+        W, H = 1500, 600
+        padding = 60
+        cover_size = 480
+        
+        font_bytes = requests.get(self.font_url).content
+        title_font = self._get_font(55, font_bytes)
+        artist_font = self._get_font(45, font_bytes)
+        lfm_font = self._get_font(35, font_bytes)
 
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
+        img = self._prepare_background(W, H)
+        draw = ImageDraw.Draw(img)
+        
+        cover = self._prepare_cover(cover_size, 30)
+        img.paste(cover, (padding, (H - cover_size) // 2), cover)
+
+        text_x = padding + cover_size + 60
+        text_y_start = 100
+        text_width_limit = W - text_x - padding
+
+        display_title = self.title
+        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
+            display_title = display_title[:-1]
+        if len(display_title) < len(self.title): display_title += "…"
+
+        display_artist = self.artists
+        while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
+            display_artist = display_artist[:-1]
+        if len(display_artist) < len(self.artists): display_artist += "…"
+
+        draw.text((text_x, text_y_start), display_title, font=title_font, fill="white")
+        draw.text((text_x, text_y_start + 70), display_artist, font=artist_font, fill="#B3B3B3")
+
+        bar_y = 480
+        draw.text((text_x, bar_y), "last.fm", font=lfm_font, fill="white")
+
+        by = io.BytesIO()
+        img.save(by, format="PNG")
+        by.seek(0)
+        by.name = "banner.png"
+        return by
+
+    def vertical(self):
+        W, H = 1000, 1500
+        padding = 80
+        cover_size = 800
+        
+        font_bytes = requests.get(self.font_url).content
+        title_font = self._get_font(60, font_bytes)
+        artist_font = self._get_font(45, font_bytes)
+        lfm_font = self._get_font(35, font_bytes)
+
+        img = self._prepare_background(W, H)
+        draw = ImageDraw.Draw(img)
+
+        cover = self._prepare_cover(cover_size, 40)
+        cover_x = (W - cover_size) // 2
+        cover_y = 120
+        img.paste(cover, (cover_x, cover_y), cover)
+
+        text_area_y = cover_y + cover_size + 120
+        text_width_limit = W - (padding * 2)
+
+        display_title = self.title
+        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
+            display_title = display_title[:-1]
+        if len(display_title) < len(self.title): display_title += "…"
+
+        display_artist = self.artists
+        while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
+            display_artist = display_artist[:-1]
+        if len(display_artist) < len(self.artists): display_artist += "…"
+
+        title_w = title_font.getlength(display_title)
+        draw.text(((W - title_w) / 2, text_area_y), display_title, font=title_font, fill="white")
+
+        artist_w = artist_font.getlength(display_artist)
+        draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#B3B3B3")
+
+        bar_y = text_area_y + 260
+        
+        lfm_w = lfm_font.getlength("last.fm")
+        draw.text(((W - lfm_w) / 2, bar_y), "last.fm", font=lfm_font, fill="white")
+
+        by = io.BytesIO()
+        img.save(by, format="PNG")
+        by.seek(0)
+        by.name = "banner.png"
+        return by
 
 @loader.tds
 class lastfmmod(loader.Module):
-    """Module for music from different services. Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods"""
-
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
+    """Module for music from different services"""
 
     strings = {
         "name": "LastFm",
@@ -148,17 +174,13 @@ class lastfmmod(loader.Module):
         "uploading": "<emoji document_id=5841359499146825803>🕔</emoji> <i>バナーをアップロード中...</i>",
     }
 
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
-
     def __init__(self):
         self.config = loader.ModuleConfig(
             loader.ConfigValue("username", None, lambda: self.strings["_doc_username"]),
             loader.ConfigValue("custom_text", "<emoji document_id=5413612466208799435>🤩</emoji> <b>{song_name}</b> — <b>{song_artist}</b>", lambda: self.strings["_doc_text"]),
             loader.ConfigValue("font", "https://raw.githubusercontent.com/kamekuro/assets/master/fonts/Onest-Bold.ttf", "Custom font URL (ttf)"),
-            loader.ConfigValue("banner_version", "new", lambda: "Banner version", validator=loader.validators.Choice(["old", "new"])),
+            loader.ConfigValue("banner_version", "horizontal", lambda: "Banner version", validator=loader.validators.Choice(["horizontal", "vertical"])),
         )
-
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
 
     @loader.command(alias="np")
     async def nowplay(self, message):
@@ -190,5 +212,3 @@ class lastfmmod(loader.Module):
 
         except Exception as e:
             await utils.answer(message, f"<pre><code class='language-python'>{e}</code></pre>")
-
-# Forked from @codrago_m. Banners from YaMusic by @kamekuro_hmods
