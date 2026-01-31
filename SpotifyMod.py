@@ -1,5 +1,5 @@
 # ORIGINAL MODULE: https://raw.githubusercontent.com/hikariatama/ftg/master/spotify.py
-
+#
 # =======================================
 #   _  __         __  __           _
 #  | |/ /___     |  \/  | ___   __| |___
@@ -13,9 +13,9 @@
 #  --------------------------------------
 #  https://creativecommons.org/licenses/by-nd/4.0/legalcode
 # =======================================
-
+#
 # meta developer: @ke_mods
-# requires: telethon spotipy pillow requests yt-dlp
+# requires: telethon spotipy pillow requests yt-dlp curl_cffi
 
 import asyncio
 import contextlib
