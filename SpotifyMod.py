@@ -737,7 +737,7 @@ class SpotifyMod(loader.Module):
 
             cmd = (
                 f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
-                f'-o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
+                f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
                 f'"ytsearch1:{squery}"'
             )
 
