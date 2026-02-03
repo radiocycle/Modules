@@ -17,6 +17,8 @@
 # meta developer: @ke_mods
 # requires: telethon spotipy pillow requests yt-dlp curl_cffi
 
+__version__ = ("d", "e", "v")
+
 import asyncio
 import contextlib
 import functools
@@ -50,7 +52,8 @@ class Banners:
         progress: int,
         track_cover: bytes,
         font,
-        blur
+        blur,
+        max_title_length
     ):
         self.title = title
         self.artists = ", ".join(artists) if isinstance(artists, list) else artists
@@ -59,6 +62,7 @@ class Banners:
         self.track_cover = track_cover
         self.font_url = font
         self.blur_intensity = blur
+        self.max_title_length = max_title_length
 
     def _get_font(self, size, font_bytes):
         return ImageFont.truetype(io.BytesIO(font_bytes), size)
@@ -109,18 +113,27 @@ class Banners:
         text_y_start = 100
         text_width_limit = W - text_x - padding
 
-        display_title = self.title
-        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
-            display_title = display_title[:-1]
-        if len(display_title) < len(self.title): display_title += "…"
+        wrapper = textwrap.TextWrapper(width=self.max_title_length)
+        title_lines = wrapper.wrap(self.title)
+        
+        if len(title_lines) > 2:
+            title_lines = title_lines[:2]
+            title_lines[-1] += "..."
 
+        current_y = text_y_start
+        title_height = title_font.getbbox("Ah")[3] + 15
+
+        for line in title_lines:
+            draw.text((text_x, current_y), line, font=title_font, fill="white")
+            current_y += title_height
+        
         display_artist = self.artists
         while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
             display_artist = display_artist[:-1]
         if len(display_artist) < len(self.artists): display_artist += "…"
 
-        draw.text((text_x, text_y_start), display_title, font=title_font, fill="white")
-        draw.text((text_x, text_y_start + 70), display_artist, font=artist_font, fill="#b3b3b3")
+        artist_y = current_y + 10 
+        draw.text((text_x, artist_y), display_artist, font=artist_font, fill="#b3b3b3")
 
         cur_time = f"{(self.progress//1000//60):02}:{(self.progress//1000%60):02}"
         dur_time = f"{(self.duration//1000//60):02}:{(self.duration//1000%60):02}"
@@ -170,23 +183,33 @@ class Banners:
         text_area_y = cover_y + cover_size + 120
         text_width_limit = W - (padding * 2)
 
-        display_title = self.title
-        while title_font.getlength(display_title) > text_width_limit and len(display_title) > 0:
-            display_title = display_title[:-1]
-        if len(display_title) < len(self.title): display_title += "…"
+        wrapper = textwrap.TextWrapper(width=self.max_title_length)
+        title_lines = wrapper.wrap(self.title)
+        
+        if len(title_lines) > 2:
+            title_lines = title_lines[:2]
+            title_lines[-1] += "..."
+
+        current_y = text_area_y
+        title_height = title_font.getbbox("Ah")[3] + 15
+
+        for line in title_lines:
+            w = title_font.getlength(line)
+            draw.text(((W - w) / 2, current_y), line, font=title_font, fill="white")
+            current_y += title_height
 
         display_artist = self.artists
         while artist_font.getlength(display_artist) > text_width_limit and len(display_artist) > 0:
             display_artist = display_artist[:-1]
         if len(display_artist) < len(self.artists): display_artist += "…"
 
-        title_w = title_font.getlength(display_title)
-        draw.text(((W - title_w) / 2, text_area_y), display_title, font=title_font, fill="white")
-
         artist_w = artist_font.getlength(display_artist)
-        draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#b3b3b3")
+        draw.text(((W - artist_w) / 2, current_y + 15), display_artist, font=artist_font, fill="#b3b3b3")
 
         bar_y = text_area_y + 260
+        if len(title_lines) > 1:
+            bar_y += 60
+
         bar_h = 8
         bar_w = W - (padding * 2)
         prog_pct = self.progress / self.duration if self.duration > 0 else 0
@@ -214,384 +237,263 @@ class SpotifyMod(loader.Module):
     strings = {
         "name": "SpotifyMod",
         "need_auth": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please execute"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please execute"
             " </b><code>.sauth</code><b> before performing this action.</b>"
         ),
         "on-repeat": (
-            "<emoji document_id=5258420634785947640>🔄</emoji> <b>Set on-repeat.</b>"
+            "<tg-emoji emoji-id=5258420634785947640>🔄</tg-emoji> <b>Set on-repeat.</b>"
         ),
         "off-repeat": (
-            "<emoji document_id=5260687119092817530>🔄</emoji> <b>Stopped track"
+            "<tg-emoji emoji-id=5260687119092817530>🔄</tg-emoji> <b>Stopped track"
             " repeat.</b>"
         ),
         "skipped": (
-            "<emoji document_id=6037622221625626773>➡️</emoji> <b>Skipped track.</b>"
+            "<tg-emoji emoji-id=6037622221625626773>➡️</tg-emoji> <b>Skipped track.</b>"
         ),
-        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>Playing...</b>",
+        "playing": "<tg-emoji emoji-id=5773626993010546707>▶️</tg-emoji> <b>Playing...</b>",
         "back": (
-            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>Switched to previous"
+            "<tg-emoji emoji-id=6039539366177541657>⬅️</tg-emoji> <b>Switched to previous"
             " track</b>"
         ),
-        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>Pause</b>",
+        "paused": "<tg-emoji emoji-id=5774077015388852135>❌</tg-emoji> <b>Pause</b>",
         "restarted": (
-            "<emoji document_id=5843596438373667352>✅️</emoji> <b>Playing track"
+            "<tg-emoji emoji-id=5843596438373667352>✅️</tg-emoji> <b>Playing track"
             " from the"
             " beginning</b>"
         ),
         "liked": (
-            "<emoji document_id=5258179403652801593>❤️</emoji> <b>Liked current"
+            "<tg-emoji emoji-id=5258179403652801593>❤️</tg-emoji> <b>Liked current"
             " playback</b>"
         ),
         "unlike": (
-            "<emoji document_id=5774077015388852135>❌</emoji>"
+            "<tg-emoji emoji-id=5774077015388852135>❌</tg-emoji>"
             " <b>Unliked current playback</b>"
         ),
         "err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>An error occurred."
             "</b>\n<code>{}</code>"
         ),
         "already_authed": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Already authorized</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Already authorized</b>"
         ),
         "authed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Authentication"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Authentication"
             " successful</b>"
         ),
         "deauth": (
-            "<emoji document_id=5877341274863832725>🚪</emoji> <b>Successfully logged out"
+            "<tg-emoji emoji-id=5877341274863832725>🚪</tg-emoji> <b>Successfully logged out"
             " of account</b>"
         ),
         "auth": (
-            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">Follow this'
+            '<tg-emoji emoji-id=5778168620278354602>🔗</tg-emoji> <a href="{}">Follow this'
             " link</a>, allow access, then enter <code>.scode https://...</code> with"
             " the link you received."
         ),
         "no_music": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>No music is playing!</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>No music is playing!</b>"
         ),
         "dl_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Failed to download"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Failed to download"
             " track.</b>"
         ),
         "volume_changed": (
-            "<emoji document_id=5890997763331591703>🔊</emoji>"
+            "<tg-emoji emoji-id=5890997763331591703>🔊</tg-emoji>"
             " <b>Volume changed to {}%.</b>"
         ),
         "volume_invalid": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Volume level must be"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Volume level must be"
             " a number between 0 and 100.</b>"
         ),
         "volume_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>An error occurred while"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>An error occurred while"
             " changing volume.</b>"
         ),
         "no_volume_arg": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please specify a"
             " volume level between 0 and 100.</b>"
         ),
         "searching_tracks": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Searching for tracks"
+            "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Searching for tracks"
             " matching {}...</b>"
         ),
         "no_search_query": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please specify a"
             " search query.</b>"
         ),
         "no_tracks_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>No tracks found for"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>No tracks found for"
             " {}.</b>"
         ),
         "search_results": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Search results for"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Search results for"
             " {}:</b>\n\n{}"
         ),
         "downloading_search_track": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Downloading {}...</b>"
+            "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Downloading {}...</b>"
         ),
         "download_success": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Successfully downloaded {} - {}</b>"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Successfully downloaded {} - {}</b>"
         ),
         "invalid_track_number": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid track number."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Invalid track number."
             " Please search first or provide a valid number from the list.</b>"
         ),
         "device_list": (
-            "<emoji document_id=5956561916573782596>📄</emoji> <b>Available devices:</b>\n{}"
+            "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Available devices:</b>\n{}"
         ),
         "no_devices_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>No devices found.</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>No devices found.</b>"
         ),
         "device_changed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Playback transferred to"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playback transferred to"
             " {}.</b>"
         ),
         "invalid_device_id": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid device ID."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Invalid device ID."
             " Use</b> <code>.sdevice</code> <b>to see available devices.</b>"
         ),
-        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Search results cleared</b>",
         "autobio": (
-            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify autobio {}</b>"
+            "<tg-emoji emoji-id=6319076999105087378>🎧</tg-emoji> <b>Spotify autobio {}</b>"
         ),
-        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlp not found... Check config or install yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
-        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Download failed</b>",
-        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Uploading banner...</i>",
-        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Downloading track...</i>",
-        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>No playlists found.</b>",
-        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>Your playlists:</b>\n\n{}",
-        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Added {} to {}</b>",
-        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Removed {} from {}</b>",
-        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>Invalid playlist number.</b>",
-        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Use .splaylists first.</b>",
-        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>Playlist {} created.</b>",
-        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>Playlist {} deleted.</b>",
-        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>Please specify a playlist name.</b>",
+        "no_ytdlp": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>yt-dlp not found... Check config or install yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
+        "snowt_failed": "\n\n<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Download failed</b>",
+        "uploading_banner": "\n\n<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <i>Uploading banner...</i>",
+        "downloading_track": "\n\n<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <i>Downloading track...</i>",
+        "no_playlists": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>No playlists found.</b>",
+        "playlists_list": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Your playlists:</b>\n\n{}",
+        "added_to_playlist": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Added {} to {}</b>",
+        "removed_from_playlist": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Removed {} from {}</b>",
+        "invalid_playlist_index": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Invalid playlist number.</b>",
+        "no_cached_playlists": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Use .splaylists first.</b>",
+        "playlist_created": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playlist {} created.</b>",
+        "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playlist {} deleted.</b>",
+        "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please specify a playlist name.</b>",
     }
 
     strings_ru = {
         "_cls_doc": "Карточка с играющим треком в Spotify.",
         "need_auth": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Выполни"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Выполни"
             " </b><code>.sauth</code><b> перед выполнением этого действия.</b>"
         ),
         "err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Произошла ошибка."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Произошла ошибка."
             "</b>\n<code>{}</code>"
         ),
         "on-repeat": (
-            "<emoji document_id=5258420634785947640>🔄</emoji> <b>Включен повтор трека.</b>"
+            "<tg-emoji emoji-id=5258420634785947640>🔄</tg-emoji> <b>Включен повтор трека.</b>"
         ),
         "off-repeat": (
-            "<emoji document_id=5260687119092817530>🔄</emoji> <b>Повтор трека отключён.</b>"
+            "<tg-emoji emoji-id=5260687119092817530>🔄</tg-emoji> <b>Повтор трека отключён.</b>"
         ),
         "skipped": (
-            "<emoji document_id=6037622221625626773>➡️</emoji> <b>Трек пропущен.</b>"
+            "<tg-emoji emoji-id=6037622221625626773>➡️</tg-emoji> <b>Трек пропущен.</b>"
         ),
-        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>Играет...</b>",
+        "playing": "<tg-emoji emoji-id=5773626993010546707>▶️</tg-emoji> <b>Играет...</b>",
         "back": (
-            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>Переключено на предыдущий трек</b>"
+            "<tg-emoji emoji-id=6039539366177541657>⬅️</tg-emoji> <b>Переключено на предыдущий трек</b>"
         ),
-        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>Пауза</b>",
+        "paused": "<tg-emoji emoji-id=5774077015388852135>❌</tg-emoji> <b>Пауза</b>",
         "restarted": (
-            "<emoji document_id=5843596438373667352>✅️</emoji> <b>Воспроизведение трека с начала...</b>"
+            "<tg-emoji emoji-id=5843596438373667352>✅️</tg-emoji> <b>Воспроизведение трека с начала...</b>"
         ),
         "liked": (
-            "<emoji document_id=5258179403652801593>❤️</emoji> <b>Текущий трек добавлен в избранное</b>"
+            "<tg-emoji emoji-id=5258179403652801593>❤️</tg-emoji> <b>Текущий трек добавлен в избранное</b>"
         ),
         "unlike": (
-            "<emoji document_id=5774077015388852135>❌</emoji> <b>Убрал лайк с текущего трека</b>"
+            "<tg-emoji emoji-id=5774077015388852135>❌</tg-emoji> <b>Убрал лайк с текущего трека</b>"
         ),
         "already_authed": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Уже авторизован</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Уже авторизован</b>"
         ),
         "authed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Успешная аутентификация</b>"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Успешная аутентификация</b>"
         ),
         "deauth": (
-            "<emoji document_id=5877341274863832725>🚪</emoji> <b>Успешный выход из аккаунта</b>"
+            "<tg-emoji emoji-id=5877341274863832725>🚪</tg-emoji> <b>Успешный выход из аккаунта</b>"
         ),
         "auth": (
-            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">Пройдите по этой ссылке</a>, разрешите вход, затем введите <code>.scode https://...</code> с ссылкой которую вы получили.'
+            '<tg-emoji emoji-id=5778168620278354602>🔗</tg-emoji> <a href="{}">Пройдите по этой ссылке</a>, разрешите вход, затем введите <code>.scode https://...</code> с ссылкой которую вы получили.'
         ),
         "no_music": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Музыка не играет!</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Музыка не играет!</b>"
         ),
         "dl_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Не удалось скачать трек.</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Не удалось скачать трек.</b>"
         ),
         "volume_changed": (
-            "<emoji document_id=5890997763331591703>🔊</emoji>"
+            "<tg-emoji emoji-id=5890997763331591703>🔊</tg-emoji>"
             " <b>Громкость изменена на {}%.</b>"
         ),
         "volume_invalid": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Уровень громкости должен"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Уровень громкости должен"
             " быть числом от 0 до 100.</b>"
         ),
         "volume_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Произошла ошибка при"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Произошла ошибка при"
             " изменении громкости.</b>"
         ),
         "no_volume_arg": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Пожалуйста, укажите"
             " уровень громкости от 0 до 100.</b>"
         ),
         "searching_tracks": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Идет поиск треков"
+            "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Идет поиск треков"
             " по запросу {}...</b>"
         ),
         "no_search_query": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Пожалуйста, укажите"
             " поисковый запрос.</b>"
         ),
         "no_tracks_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>По запросу '{}'"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>По запросу '{}'"
             " ничего не найдено.</b>"
         ),
         "search_results": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Результаты поиска"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Результаты поиска"
             " по запросу {}:</b>\n\n{}"
         ),
         "downloading_search_track": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>Скачиваю {}...</b>"
+            "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Скачиваю {}...</b>"
         ),
         "download_success": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} - {} успешно скачан.</b>"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Трек {} - {} успешно скачан.</b>"
         ),
         "invalid_track_number": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Некорректный номер трека."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Некорректный номер трека."
             " Сначала выполните поиск или укажите правильный номер из списка.</b>"
         ),
         "device_list": (
-            "<emoji document_id=5956561916573782596>📄</emoji> <b>Доступные устройства:</b>\n{}"
+            "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Доступные устройства:</b>\n{}"
         ),
         "no_devices_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Устройства не найдены.</b>"
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Устройства не найдены.</b>"
         ),
         "device_changed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>Воспроизведение переключено на"
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Воспроизведение переключено на"
             " {}.</b>"
         ),
         "invalid_device_id": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>Некорректный ID устройства."
+            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Некорректный ID устройства."
             " Используйте</b> <code>.sdevice</code> <b>, чтобы увидеть доступные устройства.</b>"
         ),
-        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>Результаты поиска очищены</b>",
         "autobio": (
-            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Обновление био"
+            "<tg-emoji emoji-id=6319076999105087378>🎧</tg-emoji> <b>Обновление био"
             " включено {}</b>"
         ),
-        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlp не найден... Проверьте конфиг или установите yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
-        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>Ошибка скачивания.</b>",
-        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Загрузка баннера...</i>",
-        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>Скачивание трека...</i>",
-        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Плейлисты не найдены.</b>",
-        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>Ваши плейлисты:</b>\n\n{}",
-        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} добавлен в {}</b>",
-        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>Трек {} удален из {}</b>",
-        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>Неверный номер плейлиста.</b>",
-        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>Сначала используйте .splaylists.</b>",
-        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>Плейлист {} создан.</b>",
-        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>Плейлист {} удален.</b>",
-        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
-    }
-    strings_jp = {
-        "_cls_doc": "Spotify からのメッセージ",
-        "need_auth": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>この操作を行う前に "
-            "</b><code>.sauth</code><b> を実行してください。</b>"
-        ),
-        "on-repeat": (
-            "<emoji document_id=5258420634785947640>🔄</emoji> <b>リピート再生を設定しました。</b>"
-        ),
-        "off-repeat": (
-            "<emoji document_id=5260687119092817530>🔄</emoji> <b>リピート再生を解除しました。</b>"
-        ),
-        "skipped": (
-            "<emoji document_id=6037622221625626773>➡️</emoji> <b>スキップしました。</b>"
-        ),
-        "playing": "<emoji document_id=5773626993010546707>▶️</emoji> <b>再生中...</b>",
-        "back": (
-            "<emoji document_id=6039539366177541657>⬅️</emoji> <b>前のトラックに戻りました。</b>"
-        ),
-        "paused": "<emoji document_id=5774077015388852135>❌</emoji> <b>一時停止</b>",
-        "restarted": (
-            "<emoji document_id=5843596438373667352>✅️</emoji> <b>最初から再生します。</b>"
-        ),
-        "liked": (
-            "<emoji document_id=5258179403652801593>❤️</emoji> <b>お気に入りに追加しました。</b>"
-        ),
-        "unlike": (
-            "<emoji document_id=5774077015388852135>❌</emoji>"
-            " <b>お気に入りから削除しました。</b>"
-        ),
-        "err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>エラーが発生しました。"
-            "</b>\n<code>{}</code>"
-        ),
-        "already_authed": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>既に認証されています。</b>"
-        ),
-        "authed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>認証に成功しました。</b>"
-        ),
-        "deauth": (
-            "<emoji document_id=5877341274863832725>🚪</emoji> <b>ログアウトしました。</b>"
-        ),
-        "auth": (
-            '<emoji document_id=5778168620278354602>🔗</emoji> <a href="{}">リンクをクリック</a>してアクセスを許可し、取得したURLを使って <code>.scode https://...</code> を入力してください。'
-        ),
-        "no_music": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>音楽は再生されていません！</b>"
-        ),
-        "dl_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>トラックのダウンロードに失敗しました。</b>"
-        ),
-        "volume_changed": (
-            "<emoji document_id=5890997763331591703>🔊</emoji>"
-            " <b>音量を {}% に変更しました。</b>"
-        ),
-        "volume_invalid": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>音量は0から100の数字で指定してください。</b>"
-        ),
-        "volume_err": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>音量の変更中にエラーが発生しました。</b>"
-        ),
-        "no_volume_arg": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>0から100の間で音量を指定してください。</b>"
-        ),
-        "searching_tracks": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>{} を検索中...</b>"
-        ),
-        "no_search_query": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>検索キーワードを指定してください。</b>"
-        ),
-        "no_tracks_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>{} は見つかりませんでした。</b>"
-        ),
-        "search_results": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>{} の検索結果:</b>\n\n{}"
-        ),
-        "downloading_search_track": (
-            "<emoji document_id=5841359499146825803>🕔</emoji> <b>{} をダウンロード中...</b>"
-        ),
-        "download_success": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>{} - {} のダウンロードに成功しました。</b>"
-        ),
-        "invalid_track_number": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>トラック番号が無効です。"
-            " 先に検索するか、リストから有効な番号を指定してください。</b>"
-        ),
-        "device_list": (
-            "<emoji document_id=5956561916573782596>📄</emoji> <b>利用可能なデバイス:</b>\n{}"
-        ),
-        "no_devices_found": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>デバイスが見つかりません。</b>"
-        ),
-        "device_changed": (
-            "<emoji document_id=5776375003280838798>✅</emoji> <b>再生デバイスを"
-            " {} に切り替えました。</b>"
-        ),
-        "invalid_device_id": (
-            "<emoji document_id=5778527486270770928>❌</emoji> <b>デバイスIDが無効です。"
-            " </b><code>.sdevice</code> <b>で利用可能なデバイスを確認してください。</b>"
-        ),
-        "search_results_cleared": "<emoji document_id=5776375003280838798>✅</emoji> <b>検索結果をクリアしました。</b>",
-        "autobio": (
-            "<emoji document_id=6319076999105087378>🎧</emoji> <b>Spotify AutoBio: {}</b>"
-        ),
-        "no_ytdlp": "<emoji document_id=5778527486270770928>❌</emoji> <b>yt-dlpが見つかりません... 設定を確認するか、インストールしてください (<code>{}terminal pip install yt-dlp</code>)</b>",
-        "snowt_failed": "\n\n<emoji document_id=5778527486270770928>❌</emoji> <b>ダウンロードに失敗しました。</b>",
-        "uploading_banner": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>バナーをアップロード中...</i>",
-        "downloading_track": "\n\n<emoji document_id=5841359499146825803>🕔</emoji> <i>トラックをダウンロード中...</i>",
-        "no_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリストが見つかりません。</b>",
-        "playlists_list": "<emoji document_id=5956561916573782596>📄</emoji> <b>あなたのプレイリスト:</b>\n\n{}",
-        "added_to_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>{} を {} に追加しました。</b>",
-        "removed_from_playlist": "<emoji document_id=5776375003280838798>✅</emoji> <b>{} を {} から削除しました。</b>",
-        "invalid_playlist_index": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリスト番号が無効です。</b>",
-        "no_cached_playlists": "<emoji document_id=5778527486270770928>❌</emoji> <b>先に .splaylists を使用してください。</b>",
-        "playlist_created": "<emoji document_id=5776375003280838798>✅</emoji> <b>プレイリスト {} を作成しました。</b>",
-        "playlist_deleted": "<emoji document_id=5776375003280838798>✅</emoji> <b>プレイリスト {} を削除しました。</b>",
-        "no_playlist_name": "<emoji document_id=5778527486270770928>❌</emoji> <b>プレイリスト名を指定してください。</b>",
+        "no_ytdlp": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>yt-dlp не найден... Проверьте конфиг или установите yt-dlp (<code>{}terminal pip install yt-dlp</code>)</b>",
+        "snowt_failed": "\n\n<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Ошибка скачивания.</b>",
+        "uploading_banner": "\n\n<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <i>Загрузка баннера...</i>",
+        "downloading_track": "\n\n<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <i>Скачивание трека...</i>",
+        "no_playlists": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Плейлисты не найдены.</b>",
+        "playlists_list": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Ваши плейлисты:</b>\n\n{}",
+        "added_to_playlist": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Трек {} добавлен в {}</b>",
+        "removed_from_playlist": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Трек {} удален из {}</b>",
+        "invalid_playlist_index": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Неверный номер плейлиста.</b>",
+        "no_cached_playlists": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Сначала используйте .splaylists.</b>",
+        "playlist_created": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Плейлист {} создан.</b>",
+        "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Плейлист {} удален.</b>",
+        "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
     }
 
     def __init__(self):
@@ -618,8 +520,8 @@ class SpotifyMod(loader.Module):
             loader.ConfigValue(
                 "custom_text",
                 (
-                    "<emoji document_id=6007938409857815902>🎧</emoji> <b>Now playing:</b> {track} — {artists}\n"
-                    "<emoji document_id=5877465816030515018>🔗</emoji> <b><a href='{songlink}'>song.link</a></b>"
+                    "<tg-emoji emoji-id=6007938409857815902>🎧</tg-emoji> <b>Now playing:</b> {track} — {artists}\n"
+                    "<tg-emoji emoji-id=5877465816030515018>🔗</tg-emoji> <b><a href='{songlink}'>song.link</a></b>"
                 ),
                 "Custom text, supports {track}, {artists}, {album}, {playlist}, {playlist_owner}, {spotify_url}, {songlink}, {progress}, {duration}, {device} placeholders." + "\n\n" + "ℹ️ Custom placeholders: {}".format(utils.config_placeholders()),
                 validator=loader.validators.String(),
@@ -652,6 +554,12 @@ class SpotifyMod(loader.Module):
                 40,
                 lambda: "Blur intensity",
                 validator=loader.validators.Integer(minimum=0),
+            ),
+            loader.ConfigValue(
+                "max_title_length",
+                30,
+                lambda: "Characters limit for title wrapping",
+                validator=loader.validators.Integer(minimum=10),
             ),
         )
 
@@ -687,12 +595,24 @@ class SpotifyMod(loader.Module):
         async def wrapped(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)
-            except Exception:
-                logger.exception(traceback.format_exc())
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Error in {func.__name__}: {error_msg}")
+                
+                match error_msg:
+                    case msg if "NO_ACTIVE_DEVICE" in msg:
+                        user_error = "No active device"
+                    case msg if "PREMIUM_REQUIRED" in msg:
+                        user_error = "Spotify Premium is required for this feature"
+                    case msg if "Insufficient client scope" in msg:
+                        user_error = "Insufficient permissions. Please re-authenticate."
+                    case _:
+                        user_error = f"{type(e).__name__}: {error_msg[:50]}"
+                
                 with contextlib.suppress(Exception):
                     await utils.answer(
                         args[1],
-                        args[0].strings("err").format(traceback.format_exc()),
+                        args[0].strings("err").format(user_error),
                     )
 
         wrapped.__doc__ = func.__doc__
@@ -750,11 +670,12 @@ class SpotifyMod(loader.Module):
 
             files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
             
-            if files:
-                target_file = os.path.join(dl_dir, files[0])
-                await utils.answer(message, caption, file=target_file)
-            else:
-                await utils.answer(message, self.strings("snowt_failed"))
+            match files:
+                case [first, *_]:
+                    target_file = os.path.join(dl_dir, first)
+                    await utils.answer(message, caption, file=target_file)
+                case _:
+                    await utils.answer(message, self.strings("snowt_failed"))
 
         except Exception as e:
             logger.error(e)
@@ -771,10 +692,11 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- ➕ Добавить текущий трек в плейлист (используйте номер из .splaylists)"
+        ru_doc="| .spla - ➕ Добавить текущий трек в плейлист (используйте номер из .splaylists | .spls)",
+        alias="spla"
     )
     async def splaylistadd(self, message: Message):
-        """- ➕ Add current track to playlist (use number from .splaylists)"""
+        """| .spla - ➕ Add current track to playlist (use number from .splaylists | .spls)"""
         args = utils.get_args_raw(message)
         if not args or not args.isdigit():
             await utils.answer(message, self.strings("invalid_playlist_index"))
@@ -783,13 +705,13 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        if not playlists:
-            await utils.answer(message, self.strings("no_cached_playlists"))
-            return
-
-        if index < 0 or index >= len(playlists):
-            await utils.answer(message, self.strings("invalid_playlist_index"))
-            return
+        match playlists:
+            case []:
+                await utils.answer(message, self.strings("no_cached_playlists"))
+                return
+            case p if index < 0 or index >= len(p):
+                await utils.answer(message, self.strings("invalid_playlist_index"))
+                return
             
         current = self.sp.current_playback()
         if not current or not current.get("item"):
@@ -804,23 +726,17 @@ class SpotifyMod(loader.Module):
         playlist_id = playlists[index]["id"]
         playlist_name = playlists[index]["name"]
         
-        try:
-            self.sp.playlist_add_items(playlist_id, [track_uri])
-        except spotipy.exceptions.SpotifyException as e:
-            if e.http_status == 403 and "Insufficient client scope" in str(e):
-                await utils.answer(message, self.strings("need_auth"))
-                return
-            raise e
-        
+        self.sp.playlist_add_items(playlist_id, [track_uri])
         await utils.answer(message, self.strings("added_to_playlist").format(utils.escape_html(full_track_name), utils.escape_html(playlist_name)))
 
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- ➖ Удалить текущий трек из плейлиста (используйте номер из .splaylists)"
+        ru_doc="| .splr - ➖ Удалить текущий трек из плейлиста (используйте номер из .splaylists | .spls)",
+        alias="splr"
     )
     async def splaylistrem(self, message: Message):
-        """- ➖ Remove current track from playlist (use number from .splaylists)"""
+        """| .splr - ➖ Remove current track from playlist (use number from .splaylists | .spls)"""
         args = utils.get_args_raw(message)
         if not args or not args.isdigit():
             await utils.answer(message, self.strings("invalid_playlist_index"))
@@ -829,13 +745,13 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        if not playlists:
-            await utils.answer(message, self.strings("no_cached_playlists"))
-            return
-
-        if index < 0 or index >= len(playlists):
-            await utils.answer(message, self.strings("invalid_playlist_index"))
-            return
+        match playlists:
+            case []:
+                await utils.answer(message, self.strings("no_cached_playlists"))
+                return
+            case p if index < 0 or index >= len(p):
+                await utils.answer(message, self.strings("invalid_playlist_index"))
+                return
             
         current = self.sp.current_playback()
         if not current or not current.get("item"):
@@ -850,23 +766,17 @@ class SpotifyMod(loader.Module):
         playlist_id = playlists[index]["id"]
         playlist_name = playlists[index]["name"]
         
-        try:
-            self.sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
-        except spotipy.exceptions.SpotifyException as e:
-            if e.http_status == 403 and "Insufficient client scope" in str(e):
-                await utils.answer(message, self.strings("need_auth"))
-                return
-            raise e
-        
+        self.sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
         await utils.answer(message, self.strings("removed_from_playlist").format(utils.escape_html(full_track_name), utils.escape_html(playlist_name)))
 
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 🆕 Создать новый плейлист"
+        ru_doc="| .splc - 🆕 Создать новый плейлист",
+        alias="splc"
     )
     async def splaylistcreate(self, message: Message):
-        """- 🆕 Create a new playlist"""
+        """| .splc - 🆕 Create a new playlist"""
         name = utils.get_args_raw(message)
         if not name:
             await utils.answer(message, self.strings("no_playlist_name"))
@@ -879,10 +789,11 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 🗑 Удалить плейлист (используйте номер из .splaylists)"
+        ru_doc="| .spld - 🗑 Удалить плейлист (используйте номер из .splaylists | .spls)",
+        alias="spld"
     )
     async def splaylistdelete(self, message: Message):
-        """- 🗑 Delete playlist (use number from .splaylists)"""
+        """| .spld - 🗑 Delete playlist (use number from .splaylists | .spls)"""
         args = utils.get_args_raw(message)
         if not args or not args.isdigit():
             await utils.answer(message, self.strings("invalid_playlist_index"))
@@ -891,13 +802,13 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        if not playlists:
-            await utils.answer(message, self.strings("no_cached_playlists"))
-            return
-
-        if index < 0 or index >= len(playlists):
-            await utils.answer(message, self.strings("invalid_playlist_index"))
-            return
+        match playlists:
+            case []:
+                await utils.answer(message, self.strings("no_cached_playlists"))
+                return
+            case p if index < 0 or index >= len(p):
+                await utils.answer(message, self.strings("invalid_playlist_index"))
+                return
             
         playlist_id = playlists[index]["id"]
         playlist_name = playlists[index]["name"]
@@ -908,17 +819,18 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 📃 Получить все плейлисты"
+        ru_doc="| .spls - 📃 Получить все плейлисты",
+        alias="spls"
     )
     async def splaylists(self, message: Message):
-        """- 📃 Get all playlists"""
+        """| .spls - 📃 Get all playlists"""
         user_id = self.sp.me()["id"]
         playlists = self.sp.current_user_playlists()
         
-        editable_playlists = []
-        for playlist in playlists["items"]:
-            if playlist["owner"]["id"] == user_id or playlist["collaborative"]:
-                editable_playlists.append(playlist)
+        editable_playlists = [
+            p for p in playlists["items"] 
+            if p["owner"]["id"] == user_id or p["collaborative"]
+        ]
         
         self.set("last_playlists", editable_playlists)
 
@@ -929,10 +841,11 @@ class SpotifyMod(loader.Module):
             count = playlist["tracks"]["total"]
             playlist_list_text += f"<b>{i + 1}.</b> <a href='{url}'>{name}</a> ({count} tracks)\n"
 
-        if not playlist_list_text:
-            await utils.answer(message, self.strings("no_playlists"))
-        else:
-            await utils.answer(message, self.strings("playlists_list").format(playlist_list_text))
+        match playlist_list_text:
+            case "":
+                await utils.answer(message, self.strings("no_playlists"))
+            case _:
+                await utils.answer(message, self.strings("playlists_list").format(playlist_list_text))
 
     @error_handler
     @tokenized
@@ -949,84 +862,84 @@ class SpotifyMod(loader.Module):
             self.strings("autobio").format("enabled" if new else "disabled"),
         )
 
-        if new:
-            self.autobio.start()
-        else:
-            self.autobio.stop()
+        match new:
+            case True:
+                self.autobio.start()
+            case _:
+                self.autobio.stop()
 
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 🔊 Изменить громкость. .svolume <0-100>"
+        ru_doc="| .sv - 🔊 Изменить громкость. .svolume | .sv <0-100>",
+        alias="sv"
     )
     async def svolume(self, message: Message):
-        """- 🔊 Change playback volume. .svolume <0-100>"""
-        try:
-            args = utils.get_args_raw(message)
-            if not args:
+        """| .sv - 🔊 Change playback volume. .svolume | .sv <0-100>"""
+        args = utils.get_args_raw(message)
+        match args:
+            case "":
                 await utils.answer(message, self.strings("no_volume_arg"))
-                return
-
-            volume_percent = int(args)
-            if 0 <= volume_percent <= 100:
-                self.sp.volume(volume_percent)
-                await utils.answer(message, self.strings("volume_changed").format(volume_percent))
-            else:
-                await utils.answer(message, self.strings("volume_invalid"))
-        except ValueError:
-            await utils.answer(message, self.strings("volume_invalid"))
-        except Exception:
-            await utils.answer(message, self.strings("volume_err"))
+            case val:
+                try:
+                    volume_percent = int(val)
+                    match volume_percent:
+                        case v if 0 <= v <= 100:
+                            self.sp.volume(v)
+                            await utils.answer(message, self.strings("volume_changed").format(v))
+                        case _:
+                            await utils.answer(message, self.strings("volume_invalid"))
+                except ValueError:
+                    await utils.answer(message, self.strings("volume_invalid"))
 
     @error_handler
     @tokenized
     @loader.command(
         ru_doc=(
-            "- 🎵 Выбрать устройство для воспроизведения. Например: .sdevice <ID устройства>\n"
-            "- 📝 Показать список устройств: .sdevice"
-        )
+            "| .sd - 🎵 Выбрать устройство для воспроизведения. Например: .sdevice <ID устройства>или .sdevice | .sd для вывода списка устройств"
+        ),
+        alias="sd"
     )
     async def sdevicecmd(self, message: Message):
-        """- 🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice to list devices"""
+        """| .sd - 🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice | .sd to list devices"""
         args = utils.get_args_raw(message)
         devices = self.sp.devices()["devices"]
 
-        if not args:
-            if not devices:
-                await utils.answer(message, self.strings("no_devices_found"))
-                return
+        match args:
+            case "":
+                match devices:
+                    case []:
+                        await utils.answer(message, self.strings("no_devices_found"))
+                    case _:
+                        device_list_text = ""
+                        for i, device in enumerate(devices):
+                            is_active = "(active)" if device["is_active"] else ""
+                            device_list_text += (
+                                f"<b>{i+1}.</b> {device['name']}"
+                                f" ({device['type']}) {is_active}\n"
+                            )
+                        await utils.answer(message, self.strings("device_list").format(device_list_text.strip()))
+            case val:
+                device_id = None
+                try:
+                    device_number = int(val)
+                    if 0 < device_number <= len(devices):
+                        device_id = devices[device_number - 1]["id"]
+                        device_name = devices[device_number - 1]["name"]
+                    else:
+                        await utils.answer(message, self.strings("invalid_device_id"))
+                        return
+                except ValueError:
+                    found_device = next((d for d in devices if d["id"] == val.strip()), None)
+                    if found_device:
+                        device_id = found_device["id"]
+                        device_name = found_device["name"]
+                    else:
+                        await utils.answer(message, self.strings("invalid_device_id"))
+                        return
 
-            device_list_text = ""
-            for i, device in enumerate(devices):
-                is_active = "(active)" if device["is_active"] else ""
-                device_list_text += (
-                    f"<b>{i+1}.</b> {device['name']}"
-                    f" ({device['type']}) {is_active}\n"
-                )
-
-            await utils.answer(message, self.strings("device_list").format(device_list_text.strip()))
-            return
-
-        device_id = None
-        try:
-            device_number = int(args)
-            if 0 < device_number <= len(devices):
-                device_id = devices[device_number - 1]["id"]
-                device_name = devices[device_number - 1]["name"]
-            else:
-                await utils.answer(message, self.strings("invalid_device_id"))
-                return
-        except ValueError:
-            found_device = next((d for d in devices if d["id"] == args.strip()), None)
-            if found_device:
-                device_id = found_device["id"]
-                device_name = found_device["name"]
-            else:
-                await utils.answer(message, self.strings("invalid_device_id"))
-                return
-
-        self.sp.transfer_playback(device_id=device_id)
-        await utils.answer(message, self.strings("device_changed").format(device_name))
+                self.sp.transfer_playback(device_id=device_id)
+                await utils.answer(message, self.strings("device_changed").format(device_name))
             
     @error_handler
     @tokenized
@@ -1160,10 +1073,11 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- Обновить токен авторизации"
+        ru_doc="| .stokr - Обновить токен авторизации",
+        alias="stokr"
     )
     async def stokrefreshcmd(self, message: Message):
-        """- Refresh authorization token"""
+        """| .stokr - Refresh authorization token"""
         self.set(
             "acs_tkn",
             self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
@@ -1175,10 +1089,11 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 🎧 Показать карточку играющего трека"
+        ru_doc="| .sn - 🎧 Показать карточку играющего трека",
+        alias="sn"
     )
     async def snowcmd(self, message: Message):
-        """- 🎧 View current track card."""
+        """| .sn - 🎧 View current track card."""
         current_playback = self.sp.current_playback()
         if not current_playback or not current_playback.get("is_playing", False):
             await utils.answer(message, self.strings("no_music"))
@@ -1251,9 +1166,15 @@ class SpotifyMod(loader.Module):
                 progress=progress_ms,
                 track_cover=requests.get(cover_url).content,
                 font=self.config["font"],
-                blur=self.config["blur_intensity"]
+                blur=self.config["blur_intensity"],
+                max_title_length=self.config["max_title_length"]
             )
-            file = getattr(banners, self.config["banner_version"], banners.horizontal)()
+            
+            match self.config["banner_version"]:
+                case "vertical":
+                    file = banners.vertical()
+                case _:
+                    file = banners.horizontal()
             
             await utils.answer(tmp_msg, text, file=file)
         else:
@@ -1262,10 +1183,11 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="- 🎧 Скачать играющий трек"
+        ru_doc="| .snt - 🎧 Скачать играющий трек",
+        alias="snt"
     )
     async def snowtcmd(self, message: Message):
-        """- 🎧 Download current track."""
+        """| .snt - 🎧 Download current track."""
         current_playback = self.sp.current_playback()
         if not current_playback or not current_playback.get("is_playing", False):
             await utils.answer(message, self.strings("no_music"))
@@ -1332,31 +1254,27 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc=(
-            "- 🔍 Поиск треков. Например: .ssearch Imagine Dragons Believer\n"
-            "- 🎧 Скачать трек: .ssearch 1 (где 1 — номер трека из списка)"
-        )
+        ru_doc="| .sq - 🔍 Поиск треков.",
+        alias="sq"
     )
     async def ssearchcmd(self, message: Message):
-        """🔍 Search for tracks. Usage: .ssearch <query> or .ssearch <number> to download"""
+        """| .sq - 🔍 Search for tracks."""
         args = utils.get_args_raw(message)
         if not args:
             await utils.answer(message, self.strings("no_search_query"))
             return
 
-        try:
+        search_results = self.get("last_search_results", [])
+        
+        is_selection = False
+        if args.isdigit():
             track_number = int(args)
-            search_results = self.get("last_search_results", [])
-            
-            if not search_results:
-                await utils.answer(message, self.strings("no_tracks_found"))
-                return
-
-            if track_number <= 0 or track_number > len(search_results):
-                raise ValueError
-
+            if search_results and 0 < track_number <= len(search_results):
+                is_selection = True
+        
+        if is_selection:
+            track_number = int(args)
             msg = await utils.answer(message, self.strings("downloading_track"))
-            
             track_info = search_results[track_number - 1]
             track_name = track_info["name"]
             artists = ", ".join([a["name"] for a in track_info["artists"]])
@@ -1365,13 +1283,11 @@ class SpotifyMod(loader.Module):
                 utils.escape_html(track_name), 
                 utils.escape_html(artists)
             )
-            
+            self.set("last_search_results", [])
             await self._download_track(msg, f"{artists} {track_name}", caption=caption_text)
-            return
-
-        except ValueError:
+                
+        else:
             await utils.answer(message, self.strings("searching_tracks").format(args))
-
             results = self.sp.search(q=args, limit=5, type="track")
 
             if not results or not results["tracks"]["items"]:
@@ -1397,36 +1313,16 @@ class SpotifyMod(loader.Module):
             text = "\n".join(tracks_list)
             await utils.answer(message, self.strings("search_results").format(args, text))
 
-    
-    @loader.command(
-        ru_doc="- 🔄 Сброс результатов поиска по трекам"
-    )
-    async def ssearchresetcmd(self, message: Message):
-        """- 🔄 Reset track search results"""
-        self.set("last_search_results", [])
-        await utils.answer(message, self.strings["search_results_cleared"])
-
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
         if not self.sp:
             return
 
-        if self.get("NextRefresh", False):
-            ttc = self.get("NextRefresh", 0)
-            crnt = time.time()
-            if ttc < crnt:
+        match self.get("NextRefresh"):
+            case val if val is False or val < time.time():
                 self.set(
                     "acs_tkn",
-                    self.sp_auth.refresh_access_token(
-                        self.get("acs_tkn")["refresh_token"]
-                    ),
+                    self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
                 )
                 self.set("NextRefresh", time.time() + 45 * 60)
                 self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
-        else:
-            self.set(
-                "acs_tkn",
-                self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
-            )
-            self.set("NextRefresh", time.time() + 45 * 60)
-            self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
