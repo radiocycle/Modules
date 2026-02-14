@@ -1326,7 +1326,7 @@ class SpotifyMod(loader.Module):
             return
 
         match self.get("NextRefresh"):
-            case val if val is False or val < time.time():
+            case val if not val or val < time.time():
                 self.set(
                     "acs_tkn",
                     self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
