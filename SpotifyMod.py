@@ -1327,9 +1327,17 @@ class SpotifyMod(loader.Module):
 
         match self.get("NextRefresh"):
             case val if not val or val < time.time():
-                self.set(
-                    "acs_tkn",
-                    self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
-                )
-                self.set("NextRefresh", time.time() + 45 * 60)
-                self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
+                try:
+                    self.set(
+                        "acs_tkn",
+                        self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
+                    )
+                    self.set("NextRefresh", time.time() + 45 * 60)
+                    self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
+                except Exception as e:
+                    logger.error(f"Spotify watcher error: {e}")
+                    if "Refresh token revoked" in str(e):
+                        refresh_token = await self.invoke("stokrefresh", "", self.inline.bot.id)
+                        await refresh_token.delete()
+                    else:
+                        self.set("NextRefresh", time.time() + 300)
