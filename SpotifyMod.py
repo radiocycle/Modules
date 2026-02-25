@@ -335,6 +335,10 @@ class SpotifyMod(loader.Module):
             "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Search results for"
             " {}:</b>\n\n{}"
         ),
+        "search_results_inline": (
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Found {count} results"
+            " for {query}.</b>\n<b>Select a track:</b>"
+        ),
         "downloading_search_track": (
             "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Downloading {}...</b>"
         ),
@@ -460,6 +464,10 @@ class SpotifyMod(loader.Module):
             "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Результаты поиска"
             " по запросу {}:</b>\n\n{}"
         ),
+        "search_results_inline": (
+            "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Найдено {count} результатов"
+            " по запросу {query}.</b>\n<b>Выберите трек:</b>"
+        ),
         "downloading_search_track": (
             "<tg-emoji emoji-id=5841359499146825803>🕔</tg-emoji> <b>Скачиваю {}...</b>"
         ),
@@ -569,6 +577,7 @@ class SpotifyMod(loader.Module):
                 validator=loader.validators.Integer(minimum=10),
             ),
         )
+        self._sp_store = {}
 
     async def client_ready(self, client, db):
         self.font_ready = asyncio.Event()
@@ -648,16 +657,92 @@ class SpotifyMod(loader.Module):
             await asyncio.sleep(max(e.seconds, 60))
             return
     
-    async def _download_track(self, message, query: str, caption: str = ""):
+    def _get_chat_id(self, target):
+        if isinstance(target, int):
+            return target
+        if not target:
+            return None
+        chat_id = getattr(target, "chat_id", None)
+        if chat_id:
+            return chat_id
+        with contextlib.suppress(Exception):
+            return utils.get_chat_id(target)
+        return None
+
+    def _reply_id(self, message):
+        reply_to_id = getattr(message, "reply_to_msg_id", None)
+        if reply_to_id:
+            return reply_to_id
+        reply_to = getattr(message, "reply_to", None)
+        return getattr(reply_to, "reply_to_msg_id", None) if reply_to else None
+
+    async def _download_track(
+        self,
+        target,
+        query,
+        caption=None,
+        track_name=None,
+        artists=None,
+        log_context=None,
+        reply_to_id=None,
+    ) -> bool:
         dl_dir = os.path.join(os.getcwd(), "spotifymod")
         if not os.path.exists(dl_dir):
             os.makedirs(dl_dir, exist_ok=True)
-        
+
         for f in os.listdir(dl_dir):
             try:
                 os.remove(os.path.join(dl_dir, f))
-            except:
+            except Exception:
                 pass
+
+        success = False
+        if caption is None:
+            safe_track = utils.escape_html(track_name or "Unknown")
+            safe_artists = utils.escape_html(artists or "Unknown Artist")
+            caption = self.strings("download_success").format(safe_track, safe_artists)
+
+        async def send_text(text: str) -> bool:
+            if target is None:
+                return False
+            if isinstance(target, int):
+                await self._client.send_message(target, text, reply_to=reply_to_id)
+                return True
+            try:
+                await utils.answer(target, text)
+                return True
+            except Exception:
+                chat_id = self._get_chat_id(target)
+                if chat_id is None:
+                    return False
+                await self._client.send_message(chat_id, text, reply_to=reply_to_id)
+                return True
+
+        async def send_file(file_path: str) -> bool:
+            if target is None:
+                return False
+            if isinstance(target, int):
+                await self._client.send_file(
+                    target,
+                    file_path,
+                    caption=caption,
+                    reply_to=reply_to_id,
+                )
+                return True
+            try:
+                await utils.answer(target, caption, file=file_path)
+                return True
+            except Exception:
+                chat_id = self._get_chat_id(target)
+                if chat_id is None:
+                    return False
+                await self._client.send_file(
+                    chat_id,
+                    file_path,
+                    caption=caption,
+                    reply_to=reply_to_id,
+                )
+                return True
 
         try:
             squery = query.replace('"', '').replace("'", "")
@@ -673,29 +758,218 @@ class SpotifyMod(loader.Module):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await proc.communicate()
+            _, stderr = await proc.communicate()
+            if proc.returncode and log_context:
+                err_text = stderr.decode(errors="ignore").strip() if stderr else ""
+                err_text = err_text[-400:] if err_text else "yt-dlp failed"
+                logger.error("Search download failed (%s): %s", log_context, err_text)
 
             files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
-            
+
             match files:
                 case [first, *_]:
                     target_file = os.path.join(dl_dir, first)
-                    await utils.answer(message, caption, file=target_file)
+                    success = await send_file(target_file)
+                    if not success:
+                        if log_context:
+                            logger.error(
+                                "Search download send failed (%s). target=%s chat_id=%s",
+                                log_context,
+                                type(target).__name__,
+                                self._get_chat_id(target),
+                            )
+                        await send_text(self.strings("dl_err"))
                 case _:
-                    await utils.answer(message, self.strings("snowt_failed"))
+                    if log_context:
+                        logger.error("Search download produced no files (%s)", log_context)
+                    await send_text(self.strings("snowt_failed"))
 
         except Exception as e:
-            logger.error(e)
-            await utils.answer(message, self.strings("dl_err"))
-        
+            if log_context:
+                logger.exception("Search download error (%s)", log_context)
+            else:
+                logger.error(e)
+            await send_text(self.strings("dl_err"))
+
         finally:
             if os.path.exists(dl_dir):
                 for f in os.listdir(dl_dir):
                     try:
                         os.remove(os.path.join(dl_dir, f))
-                    except:
+                    except Exception:
                         pass
-                        
+
+        return success
+
+    def _short_text(self, text: str, limit: int = 60) -> str:
+        text = " ".join(text.split())
+        if len(text) <= limit:
+            return text
+        if limit <= 3:
+            return text[:limit]
+        return text[: limit - 3] + "..."
+
+
+
+    def _track_info(self, track_info) -> tuple:
+        if isinstance(track_info, dict):
+            track_name = track_info.get("name", "Unknown")
+            artists_list = [
+                a.get("name") for a in track_info.get("artists", []) if a.get("name")
+            ]
+            artists = ", ".join(artists_list) if artists_list else "Unknown Artist"
+            return track_name, artists
+
+        if isinstance(track_info, (list, tuple)):
+            track_name = track_info[0] if len(track_info) > 0 else "Unknown"
+            artists = track_info[1] if len(track_info) > 1 else "Unknown Artist"
+            if not artists:
+                artists = "Unknown Artist"
+            return track_name or "Unknown", artists
+
+        return "Unknown", "Unknown Artist"
+
+    def _search_keyboard(self, tracks: list, chat_id=None, reply_to_id=None) -> list:
+        keyboard = []
+        for track in tracks:
+            track_name, artists = self._track_info(track)
+            label = f"{track_name} — {artists}" if artists else track_name
+            keyboard.append(
+                [
+                    {
+                        "text": self._short_text(label),
+                        "callback": self._inline_download_track,
+                        "args": (track_name, artists, reply_to_id, chat_id),
+                    }
+                ]
+            )
+
+        return keyboard
+
+    async def _inline_download_track(
+        self,
+        call,
+        track_name: str,
+        artists: str,
+        reply_to_id=None,
+        chat_id=None,
+    ):
+        track_name = track_name or "Unknown"
+        artists = artists or "Unknown Artist"
+
+        with contextlib.suppress(Exception):
+            await call.answer()
+
+        with contextlib.suppress(Exception):
+            await call.edit(self.strings("downloading_track").lstrip(), reply_markup=None)
+
+        target_message = getattr(call, "message", None)
+        if reply_to_id is None:
+            reply_to_id = self._reply_id(target_message)
+
+        if chat_id is None:
+            chat_id = self._get_chat_id(target_message)
+        if chat_id is None:
+            chat_id = getattr(call, "chat_id", None)
+        if chat_id is None:
+            chat_id = self._get_chat_id(call)
+
+        if chat_id is None and target_message is None:
+            logger.error("Inline download missing chat_id (%s - %s)", track_name, artists)
+            with contextlib.suppress(Exception):
+                await call.edit(self.strings("dl_err"), reply_markup=None)
+            return
+
+        target = chat_id if chat_id is not None else target_message
+
+        success = await self._download_track(
+            target,
+            f"{artists} {track_name}",
+            track_name=track_name,
+            artists=artists,
+            log_context=f"{track_name} - {artists}",
+            reply_to_id=reply_to_id,
+        )
+
+        if success:
+            with contextlib.suppress(Exception):
+                await call.delete()
+        else:
+            with contextlib.suppress(Exception):
+                await call.edit(self.strings("dl_err"), reply_markup=None)
+
+    async def _inline_search_tracks(self, query):
+        if not self.get("acs_tkn", False) or not self.sp:
+            return {
+                "title": "Auth required",
+                "description": "Run .sauth",
+                "message": self.strings("need_auth"),
+            }
+
+        query_text = (query.args or "").strip()
+        if not query_text:
+            return {
+                "title": "No query",
+                "description": "Provide search query",
+                "message": self.strings("no_search_query"),
+            }
+
+        try:
+            results = await asyncio.to_thread(
+                self.sp.search,
+                q=query_text,
+                limit=5,
+                type="track",
+            )
+        except Exception as e:
+            return {
+                "title": "Search error",
+                "description": "Try again",
+                "message": self.strings("err").format(
+                    utils.escape_html(str(e)[:50])
+                ),
+            }
+
+        if not results or not results["tracks"]["items"]:
+            return {
+                "title": "No results",
+                "description": self._short_text(query_text, limit=60),
+                "message": self.strings("no_tracks_found").format(
+                    utils.escape_html(query_text)
+                ),
+            }
+
+        tracks = results["tracks"]["items"]
+        store_id = id(tracks)
+        self._sp_store[store_id] = [(t.get("name", "Unknown"), ", ".join(a.get("name", "") for a in t.get("artists", []) if a.get("name")) or "Unknown Artist") for t in tracks]
+        
+        entries = []
+        for i, track in enumerate(tracks):
+            track_name, artists = self._track_info(track)
+            cover_list = track.get("album", {}).get("images", [])
+            thumb = cover_list[0]["url"] if cover_list else None
+
+            entries.append(
+                {
+                    "title": self._short_text(track_name, limit=60),
+                    "description": self._short_text(artists, limit=60) if artists else "",
+                    "message": f"{self.strings('downloading_track').lstrip()}\n<i>spdl_{store_id}_{i}</i>",
+                    "thumb": thumb,
+                }
+            )
+
+        return entries
+
+    @loader.inline_handler(ru_doc="<запрос> - поиск треков Spotify.")
+    async def sq(self, query):
+        """<query> - search Spotify track"""
+        return await self._inline_search_tracks(query)
+
+    @loader.inline_handler(ru_doc="<запрос> - поиск треков Spotify.")
+    async def ssearch(self, query):
+        """<query> - search Spotifyi track"""
+        return await self._inline_search_tracks(query)
+                         
     @error_handler
     @tokenized
     @loader.command(
@@ -1283,46 +1557,87 @@ class SpotifyMod(loader.Module):
             track_number = int(args)
             msg = await utils.answer(message, self.strings("downloading_track"))
             track_info = search_results[track_number - 1]
-            track_name = track_info["name"]
-            artists = ", ".join([a["name"] for a in track_info["artists"]])
-            
-            caption_text = self.strings("download_success").format(
-                utils.escape_html(track_name), 
-                utils.escape_html(artists)
+            track_name, artists = self._track_info(track_info)
+            reply_to_id = self._reply_id(message)
+
+            chat_id = self._get_chat_id(message)
+            target = chat_id if chat_id is not None else msg
+            success = await self._download_track(
+                target,
+                f"{artists} {track_name}",
+                track_name=track_name,
+                artists=artists,
+                log_context=f"{track_name} - {artists}",
+                reply_to_id=reply_to_id,
             )
+            if success:
+                with contextlib.suppress(Exception):
+                    await msg.delete()
             self.set("last_search_results", [])
-            await self._download_track(msg, f"{artists} {track_name}", caption=caption_text)
                 
         else:
-            await utils.answer(message, self.strings("searching_tracks").format(args))
-            results = self.sp.search(q=args, limit=5, type="track")
+            results = await asyncio.to_thread(
+                self.sp.search,
+                q=args,
+                limit=5,
+                type="track",
+            )
 
             if not results or not results["tracks"]["items"]:
                 await utils.answer(message, self.strings("no_tracks_found").format(args))
                 return
 
-            self.set("last_search_results", results["tracks"]["items"])
-            
-            tracks_list = []
-            for i, track in enumerate(results["tracks"]["items"]):
-                track_name = track["name"]
-                artists = ", ".join([artist["name"] for artist in track["artists"]])
-                track_url = track["external_urls"]["spotify"]
-                tracks_list.append(
-                    "<b>{number}.</b> {track_name} — {artists}\n<a href='{track_url}'>🔗 Spotify</a>".format(
-                        number=i + 1,
-                        track_name=utils.escape_html(track_name),
-                        artists=utils.escape_html(artists),
-                        track_url=track_url,
-                    )
-                )
+            tracks = results["tracks"]["items"]
+            self.set("last_search_results", tracks)
 
-            text = "\n".join(tracks_list)
-            await utils.answer(message, self.strings("search_results").format(args, text))
+            reply_to_id = self._reply_id(message)
+
+            await self.inline.form(
+                self.strings("search_results_inline").format(
+                    count=len(tracks),
+                    query=utils.escape_html(args),
+                ),
+                message=message,
+                reply_markup=self._search_keyboard(
+                    tracks,
+                    self._get_chat_id(message),
+                    reply_to_id,
+                ),
+            )
 
     async def watcher(self, message: Message):
         """Watcher is used to update token"""
         if not self.sp:
+            return
+
+        raw = getattr(message, "raw_text", "") or ""
+        if "spdl_" in raw:
+            try:
+                tag = raw.split("spdl_")[1].split("</i>")[0]
+                sid, idx = tag.split("_")
+                store_id, index = int(sid), int(idx)
+            except:
+                return
+            
+            data = self._sp_store.pop(store_id, [])
+            if not data or index >= len(data):
+                return
+            
+            track_name, artists = data[index]
+            chat_id = self._get_chat_id(message)
+            if not chat_id:
+                return
+            
+            reply_to_id = self._reply_id(message)
+            success = await self._download_track(
+                chat_id, f"{artists} {track_name}",
+                track_name=track_name, artists=artists,
+                log_context=f"{track_name} - {artists}",
+                reply_to_id=reply_to_id,
+            )
+            if success:
+                with contextlib.suppress(Exception):
+                    await message.delete()
             return
 
         match self.get("NextRefresh"):
