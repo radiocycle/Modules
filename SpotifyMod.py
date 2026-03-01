@@ -23,6 +23,7 @@
 #
 # meta developer: @ke_mods
 # requires: telethon spotipy pillow requests yt-dlp curl_cffi
+# scope: ffmpeg
 
 __version__ = ("d", "e", "v")
 
