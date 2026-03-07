@@ -550,8 +550,8 @@ class SpotifyMod(loader.Module):
             ),
             loader.ConfigValue(
                 "auto_bio_template",
-                "🎧 {}",
-                lambda: "Template for Spotify AutoBio",
+                "🎧 {title} - {artist}",
+                lambda: "Template for Spotify AutoBio, supports {artist}, {title}",
             ),
             loader.ConfigValue(
                 "ytdlp_path",
@@ -590,8 +590,10 @@ class SpotifyMod(loader.Module):
             self.set("acs_tkn", None)
             self.sp = None
 
+        self.bio_task = None
+
         if self.get("autobio", False):
-            self.autobio.start()
+            await self.autobio()
 
     def tokenized(func) -> FunctionType:
         @functools.wraps(func)
@@ -638,25 +640,51 @@ class SpotifyMod(loader.Module):
         return wrapped
 
 
-    @loader.loop(interval=90)
     async def autobio(self):
-        try:
-            current_playback = self.sp.current_playback()
-            track = current_playback["item"]["name"]
-            track = re.sub(r"([(].*?[)])", "", track).strip()
-        except Exception:
-            return
-
-        bio = self.config["auto_bio_template"].format(f"{track}")
-
-        try:
-            await self._client(
-                UpdateProfileRequest(about=bio[: 140 if self._premium else 70])
-            )
-        except FloodWaitError as e:
-            logger.info(f"Sleeping {max(e.seconds, 60)} bc of floodwait")
-            await asyncio.sleep(max(e.seconds, 60))
-            return
+        if getattr(self, "bio_task", None) and not self.bio_task.done():
+            self.bio_task.cancel()
+    
+        async def _loop():
+            while self.get("autobio", False):
+                try:
+                    current_playback = await utils.run_sync(self.sp.current_playback)
+    
+                    if not current_playback or not current_playback.get("is_playing"):
+                        await asyncio.sleep(10)
+                        continue
+    
+                    item = current_playback.get("item") or {}
+                    title = item.get("name") or ""
+                    artists = ", ".join(
+                        [a.get("name", "") for a in item.get("artists", []) if a.get("name")]
+                    )
+    
+                    if not title:
+                        await asyncio.sleep(10)
+                        continue
+    
+                    bio = self.config["auto_bio_template"].format(
+                        title=title,
+                        artist=artists or "Unknown Artist",
+                    ).strip()
+    
+                    if len(bio) > 70:
+                        bio = bio[:69] + "…"
+    
+                    if bio != self.get("last_bio", ""):
+                        await self._client(UpdateProfileRequest(about=bio))
+                        self.set("last_bio", bio)
+    
+                except FloodWaitError as e:
+                    await asyncio.sleep(getattr(e, "seconds", 30) + 1)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.exception("autobio error: %s", e)
+    
+                await asyncio.sleep(self.config.get("BIO_UPDATE_DELAY", 30))
+    
+        self.bio_task = asyncio.create_task(_loop())
     
     def _get_chat_id(self, target):
         if isinstance(target, int):
@@ -968,7 +996,7 @@ class SpotifyMod(loader.Module):
 
     @loader.inline_handler(ru_doc="<запрос> - поиск треков Spotify.")
     async def ssearch(self, query):
-        """<query> - search Spotifyi track"""
+        """<query> - search Spotify track"""
         return await self._inline_search_tracks(query)
                          
     @error_handler
@@ -1134,21 +1162,28 @@ class SpotifyMod(loader.Module):
     @loader.command(
         ru_doc="- ℹ️ Переключить стриминг воспроизведения в био"
     )
-    async def sbiocmd(self, message: Message):
-        """- ℹ️ Toggle bio playback streaming"""
-        current = self.get("autobio", False)
-        new = not current
-        self.set("autobio", new)
+    async def sbiocmd(self, message):
+        """- ℹ️ Toggle streaming playback in bio"""
+        if not getattr(self, "sp", None):
+            await utils.answer(message, self.strings("need_auth"))
+            return
+    
+        state = not self.get("autobio", False)
+        self.set("autobio", state)
+    
+        if state:
+            self.set("last_bio", "")
+            await self.autobio()
+        else:
+            task = getattr(self, "bio_task", None)
+            if task and not task.done():
+                task.cancel()
+            self.bio_task = None
+    
         await utils.answer(
             message,
-            self.strings("autobio").format("enabled" if new else "disabled"),
+            self.strings("autobio").format("on" if state else "off"),
         )
-
-        match new:
-            case True:
-                self.autobio.start()
-            case _:
-                self.autobio.stop()
 
     @error_handler
     @tokenized
