@@ -39,11 +39,11 @@ class Banners:
     def _prepare_cover(self, size, radius):
         cover = Image.open(io.BytesIO(self.track_cover)).convert("RGBA")
         cover = cover.resize((size, size), Image.Resampling.LANCZOS)
-        
+
         mask = Image.new("L", (size, size), 0)
         draw = ImageDraw.Draw(mask)
         draw.rounded_rectangle((0, 0, size, size), radius=radius, fill=255)
-        
+
         output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         output.paste(cover, (0, 0), mask=mask)
         return output
@@ -59,7 +59,7 @@ class Banners:
         W, H = 1500, 600
         padding = 60
         cover_size = 480
-        
+
         font_bytes = requests.get(self.font_url).content
         title_font = self._get_font(55, font_bytes)
         artist_font = self._get_font(45, font_bytes)
@@ -67,7 +67,7 @@ class Banners:
 
         img = self._prepare_background(W, H)
         draw = ImageDraw.Draw(img)
-        
+
         cover = self._prepare_cover(cover_size, 30)
         img.paste(cover, (padding, (H - cover_size) // 2), cover)
 
@@ -101,7 +101,7 @@ class Banners:
         W, H = 1000, 1300
         padding = 60
         cover_size = 800
-        
+
         font_bytes = requests.get(self.font_url).content
         title_font = self._get_font(60, font_bytes)
         artist_font = self._get_font(45, font_bytes)
@@ -135,7 +135,7 @@ class Banners:
         draw.text(((W - artist_w) / 2, text_area_y + 75), display_artist, font=artist_font, fill="#B3B3B3")
 
         text_y = text_area_y + 180
-        
+
         lfm_w = lfm_font.getlength("last.fm")
         draw.text(((W - lfm_w) / 2, text_y), "last.fm", font=lfm_font, fill="white")
 
@@ -182,13 +182,15 @@ class lastfmmod(loader.Module):
         if not user:
             await self.invoke("config", "lastfm", message=message)
             return await utils.answer(message, self.strings["nick_error"])
-            
+
         try:
+            msg = await utils.answer(message, self.strings["uploading"])
+
             url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&nowplaying=true&user={user}&api_key=460cda35be2fbf4f28e8ea7a38580730&format=json'
             data = requests.get(url).json()
             track = next((t for t in data.get('recenttracks', {}).get('track', []) if t.get('@attr', {}).get('nowplaying')), None)
             if not track:
-                return await utils.answer(message, self.strings["no_track"])
+                return await utils.answer(msg, self.strings["no_track"])
             name = track.get('name', 'Unknown')
             artist = track.get('artist', {}).get('#text', 'Unknown')
             caption = self.config["custom_text"].format(song_artist=artist, song_name=name)
@@ -199,9 +201,8 @@ class lastfmmod(loader.Module):
                 cov_url = self.config["fallback_cover"]
 
             if not cov_url or not str(cov_url).strip():
-                return await utils.answer(message, caption)
-                
-            msg = await utils.answer(message, self.strings["uploading"])
+                return await utils.answer(msg, caption)
+
             cov_bytes = await utils.run_sync(requests.get, cov_url)
             banners = Banners(name, artist, cov_bytes.content, self.config["font"])
             file = await utils.run_sync(getattr(banners, self.config["banner_version"]))
