@@ -60,8 +60,7 @@ class Banners:
         progress: int,
         track_cover: bytes,
         font,
-        blur,
-        max_title_length
+        blur
     ):
         self.title = title
         self.artists = ", ".join(artists) if isinstance(artists, list) else artists
@@ -70,7 +69,6 @@ class Banners:
         self.track_cover = track_cover
         self.font_url = font
         self.blur_intensity = blur
-        self.max_title_length = max_title_length
 
     def _get_font(self, size, font_bytes):
         return ImageFont.truetype(io.BytesIO(font_bytes), size)
@@ -121,7 +119,7 @@ class Banners:
         text_y_start = 100
         text_width_limit = W - text_x - padding
 
-        wrapper = textwrap.TextWrapper(width=self.max_title_length)
+        wrapper = textwrap.TextWrapper(width=23)
         title_lines = wrapper.wrap(self.title)
         
         if len(title_lines) > 2:
@@ -191,7 +189,7 @@ class Banners:
         text_area_y = cover_y + cover_size + 120
         text_width_limit = W - (padding * 2)
 
-        wrapper = textwrap.TextWrapper(width=self.max_title_length)
+        wrapper = textwrap.TextWrapper(width=23)
         title_lines = wrapper.wrap(self.title)
         
         if len(title_lines) > 2:
@@ -560,6 +558,12 @@ class SpotifyMod(loader.Module):
                 validator=loader.validators.String(),
             ),
             loader.ConfigValue(
+                "cookies_path",
+                "",
+                "Path to your cookies for yt-dlp",
+                validator=loader.validators.String(),
+            ),
+            loader.ConfigValue(
                 "banner_version",
                 "horizontal",
                 lambda: "Banner version",
@@ -570,12 +574,6 @@ class SpotifyMod(loader.Module):
                 40,
                 lambda: "Blur intensity",
                 validator=loader.validators.Integer(minimum=0),
-            ),
-            loader.ConfigValue(
-                "max_title_length",
-                30,
-                lambda: "Characters limit for title wrapping",
-                validator=loader.validators.Integer(minimum=10),
             ),
         )
         self._sp_store = {}
@@ -776,11 +774,20 @@ class SpotifyMod(loader.Module):
         try:
             squery = query.replace('"', '').replace("'", "")
 
-            cmd = (
-                f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
-                f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
-                f'"ytsearch1:{squery}"'
-            )
+            cookies = self.config["cookies_path"]
+            
+            if cookies:
+                cmd = (
+                    f'{self.config["ytdlp_path"]} -x --impersonate="" --cookies {cookies} --audio-format mp3 --add-metadata '
+                    f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
+                    f'"ytsearch1:{squery}"'
+                )
+            else:
+                cmd = (
+                    f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
+                    f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
+                    f'"ytsearch1:{squery}"'
+                )
 
             proc = await asyncio.create_subprocess_shell(
                 cmd,
@@ -1484,7 +1491,6 @@ class SpotifyMod(loader.Module):
                 track_cover=requests.get(cover_url).content,
                 font=self.config["font"],
                 blur=self.config["blur_intensity"],
-                max_title_length=self.config["max_title_length"]
             )
             
             match self.config["banner_version"]:
