@@ -44,6 +44,7 @@ import spotipy
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from telethon.errors import FloodWaitError
 from telethon.tl.functions.account import UpdateProfileRequest
+from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import Message
 
 from .. import loader, utils
@@ -513,6 +514,7 @@ class SpotifyMod(loader.Module):
     def __init__(self):
         self._client_id = "e0708753ab60499c89ce263de9b4f57a"
         self._client_secret = "80c927166c664ee98a43a2c0e2981b4a"
+        self.sp = None
         self.scope = (
             "user-read-playback-state playlist-read-private playlist-read-collaborative"
             " user-modify-playback-state user-library-modify"
@@ -578,19 +580,31 @@ class SpotifyMod(loader.Module):
         )
         self._sp_store = {}
 
+    def _init_spotify_client(self) -> bool:
+        token = self.get("acs_tkn") or {}
+        access_token = token.get("access_token")
+        if not access_token:
+            self.sp = None
+            return False
+
+        try:
+            self.sp = spotipy.Spotify(auth=access_token)
+        except Exception:
+            self.sp = None
+            return False
+
+        return True
+
     async def client_ready(self, client, db):
         self.font_ready = asyncio.Event()
 
         self._premium = getattr(await client.get_me(), "premium", False)
-        try:
-            self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
-        except Exception:
+        if not self._init_spotify_client():
             self.set("acs_tkn", None)
-            self.sp = None
 
         self.bio_task = None
 
-        if self.get("autobio", False):
+        if self.get("autobio", False) and self.sp:
             await self.autobio()
 
     def tokenized(func) -> FunctionType:
@@ -645,9 +659,16 @@ class SpotifyMod(loader.Module):
         async def _loop():
             while self.get("autobio", False):
                 try:
+                    if not self.sp and not self._init_spotify_client():
+                        self.set("autobio", False)
+                        await self._restore_original_bio()
+                        break
+
                     current_playback = await utils.run_sync(self.sp.current_playback)
     
                     if not current_playback or not current_playback.get("is_playing"):
+                        if self.get("last_bio", ""):
+                            await self._restore_original_bio(clear_original=False)
                         await asyncio.sleep(10)
                         continue
     
@@ -681,8 +702,28 @@ class SpotifyMod(loader.Module):
                     logger.exception("autobio error: %s", e)
     
                 await asyncio.sleep(self.config.get("BIO_UPDATE_DELAY", 30))
-    
+
         self.bio_task = asyncio.create_task(_loop())
+
+    async def _get_current_about(self) -> str:
+        full_user = await self._client(GetFullUserRequest("me"))
+        return getattr(full_user.full_user, "about", "") or ""
+
+    async def _restore_original_bio(
+        self,
+        *,
+        clear_original: bool = True,
+        clear_last: bool = True,
+    ):
+        original_bio = self.get("original_bio", None)
+        if original_bio is None:
+            return
+
+        await self._client(UpdateProfileRequest(about=original_bio))
+        if clear_original:
+            self.set("original_bio", None)
+        if clear_last:
+            self.set("last_bio", "")
     
     def _get_chat_id(self, target):
         if isinstance(target, int):
@@ -1179,6 +1220,7 @@ class SpotifyMod(loader.Module):
         self.set("autobio", state)
     
         if state:
+            self.set("original_bio", await self._get_current_about())
             self.set("last_bio", "")
             await self.autobio()
         else:
@@ -1186,6 +1228,7 @@ class SpotifyMod(loader.Module):
             if task and not task.done():
                 task.cancel()
             self.bio_task = None
+            await self._restore_original_bio()
     
         await utils.answer(
             message,
@@ -1381,7 +1424,7 @@ class SpotifyMod(loader.Module):
         url = message.message.split(" ")[1]
         code = self.sp_auth.parse_auth_response_url(url)
         self.set("acs_tkn", self.sp_auth.get_access_token(code, True, False))
-        self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
+        self._init_spotify_client()
         await utils.answer(message, self.strings("authed"))
 
     @error_handler
@@ -1391,7 +1434,7 @@ class SpotifyMod(loader.Module):
     async def unauthcmd(self, message: Message):
         """- Log out of account"""
         self.set("acs_tkn", None)
-        del self.sp
+        self.sp = None
         await utils.answer(message, self.strings("deauth"))
 
     @error_handler
@@ -1407,7 +1450,7 @@ class SpotifyMod(loader.Module):
             self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
         )
         self.set("NextRefresh", time.time() + 45 * 60)
-        self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
+        self._init_spotify_client()
         await utils.answer(message, self.strings("authed"))
 
     @error_handler
