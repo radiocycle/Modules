@@ -630,15 +630,14 @@ class SpotifyMod(loader.Module):
                 error_msg = str(e)
                 logger.error(f"Error in {func.__name__}: {error_msg}")
                 
-                match error_msg:
-                    case msg if "NO_ACTIVE_DEVICE" in msg:
-                        user_error = "No active device"
-                    case msg if "PREMIUM_REQUIRED" in msg:
-                        user_error = "Spotify Premium is required for this feature"
-                    case msg if "Insufficient client scope" in msg:
-                        user_error = "Insufficient permissions. Please re-authenticate."
-                    case _:
-                        user_error = f"{type(e).__name__}: {error_msg[:50]}"
+                if "NO_ACTIVE_DEVICE" in error_msg:
+                    user_error = "No active device"
+                elif "PREMIUM_REQUIRED" in error_msg:
+                    user_error = "Spotify Premium is required for this feature"
+                elif "Insufficient client scope" in error_msg:
+                    user_error = "Insufficient permissions. Please re-authenticate."
+                else:
+                    user_error = f"{type(e).__name__}: {error_msg[:50]}"
                 
                 with contextlib.suppress(Exception):
                     await utils.answer(
@@ -843,23 +842,23 @@ class SpotifyMod(loader.Module):
 
             files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
 
-            match files:
-                case [first, *_]:
-                    target_file = os.path.join(dl_dir, first)
-                    success = await send_file(target_file)
-                    if not success:
-                        if log_context:
-                            logger.error(
-                                "Search download send failed (%s). target=%s chat_id=%s",
-                                log_context,
-                                type(target).__name__,
-                                self._get_chat_id(target),
-                            )
-                        await send_text(self.strings("dl_err"))
-                case _:
+            if files:
+                first = files[0]
+                target_file = os.path.join(dl_dir, first)
+                success = await send_file(target_file)
+                if not success:
                     if log_context:
-                        logger.error("Search download produced no files (%s)", log_context)
-                    await send_text(self.strings("snowt_failed"))
+                        logger.error(
+                            "Search download send failed (%s). target=%s chat_id=%s",
+                            log_context,
+                            type(target).__name__,
+                            self._get_chat_id(target),
+                        )
+                    await send_text(self.strings("dl_err"))
+            else:
+                if log_context:
+                    logger.error("Search download produced no files (%s)", log_context)
+                await send_text(self.strings("snowt_failed"))
 
         except Exception as e:
             if log_context:
@@ -1063,13 +1062,12 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        match playlists:
-            case []:
-                await utils.answer(message, self.strings("no_cached_playlists"))
-                return
-            case p if index < 0 or index >= len(p):
-                await utils.answer(message, self.strings("invalid_playlist_index"))
-                return
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
             
         current = self.sp.current_playback()
         if not current or not current.get("item"):
@@ -1103,13 +1101,12 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        match playlists:
-            case []:
-                await utils.answer(message, self.strings("no_cached_playlists"))
-                return
-            case p if index < 0 or index >= len(p):
-                await utils.answer(message, self.strings("invalid_playlist_index"))
-                return
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
             
         current = self.sp.current_playback()
         if not current or not current.get("item"):
@@ -1160,13 +1157,12 @@ class SpotifyMod(loader.Module):
         index = int(args) - 1
         playlists = self.get("last_playlists", [])
         
-        match playlists:
-            case []:
-                await utils.answer(message, self.strings("no_cached_playlists"))
-                return
-            case p if index < 0 or index >= len(p):
-                await utils.answer(message, self.strings("invalid_playlist_index"))
-                return
+        if not playlists:
+            await utils.answer(message, self.strings("no_cached_playlists"))
+            return
+        if index < 0 or index >= len(playlists):
+            await utils.answer(message, self.strings("invalid_playlist_index"))
+            return
             
         playlist_id = playlists[index]["id"]
         playlist_name = playlists[index]["name"]
@@ -1199,11 +1195,10 @@ class SpotifyMod(loader.Module):
             count = playlist["tracks"]["total"]
             playlist_list_text += f"<b>{i + 1}.</b> <a href='{url}'>{name}</a> ({count} tracks)\n"
 
-        match playlist_list_text:
-            case "":
-                await utils.answer(message, self.strings("no_playlists"))
-            case _:
-                await utils.answer(message, self.strings("playlists_list").format(playlist_list_text))
+        if playlist_list_text == "":
+            await utils.answer(message, self.strings("no_playlists"))
+        else:
+            await utils.answer(message, self.strings("playlists_list").format(playlist_list_text))
 
     @error_handler
     @tokenized
@@ -1244,20 +1239,18 @@ class SpotifyMod(loader.Module):
     async def svolume(self, message: Message):
         """| .sv - 🔊 Change playback volume. .svolume | .sv <0-100>"""
         args = utils.get_args_raw(message)
-        match args:
-            case "":
-                await utils.answer(message, self.strings("no_volume_arg"))
-            case val:
-                try:
-                    volume_percent = int(val)
-                    match volume_percent:
-                        case v if 0 <= v <= 100:
-                            self.sp.volume(v)
-                            await utils.answer(message, self.strings("volume_changed").format(v))
-                        case _:
-                            await utils.answer(message, self.strings("volume_invalid"))
-                except ValueError:
+        if args == "":
+            await utils.answer(message, self.strings("no_volume_arg"))
+        else:
+            try:
+                volume_percent = int(args)
+                if 0 <= volume_percent <= 100:
+                    self.sp.volume(volume_percent)
+                    await utils.answer(message, self.strings("volume_changed").format(volume_percent))
+                else:
                     await utils.answer(message, self.strings("volume_invalid"))
+            except ValueError:
+                await utils.answer(message, self.strings("volume_invalid"))
 
     @error_handler
     @tokenized
@@ -1272,41 +1265,39 @@ class SpotifyMod(loader.Module):
         args = utils.get_args_raw(message)
         devices = self.sp.devices()["devices"]
 
-        match args:
-            case "":
-                match devices:
-                    case []:
-                        await utils.answer(message, self.strings("no_devices_found"))
-                    case _:
-                        device_list_text = ""
-                        for i, device in enumerate(devices):
-                            is_active = "(active)" if device["is_active"] else ""
-                            device_list_text += (
-                                f"<b>{i+1}.</b> {device['name']}"
-                                f" ({device['type']}) {is_active}\n"
-                            )
-                        await utils.answer(message, self.strings("device_list").format(device_list_text.strip()))
-            case val:
-                device_id = None
-                try:
-                    device_number = int(val)
-                    if 0 < device_number <= len(devices):
-                        device_id = devices[device_number - 1]["id"]
-                        device_name = devices[device_number - 1]["name"]
-                    else:
-                        await utils.answer(message, self.strings("invalid_device_id"))
-                        return
-                except ValueError:
-                    found_device = next((d for d in devices if d["id"] == val.strip()), None)
-                    if found_device:
-                        device_id = found_device["id"]
-                        device_name = found_device["name"]
-                    else:
-                        await utils.answer(message, self.strings("invalid_device_id"))
-                        return
+        if args == "":
+            if not devices:
+                await utils.answer(message, self.strings("no_devices_found"))
+            else:
+                device_list_text = ""
+                for i, device in enumerate(devices):
+                    is_active = "(active)" if device["is_active"] else ""
+                    device_list_text += (
+                        f"<b>{i+1}.</b> {device['name']}"
+                        f" ({device['type']}) {is_active}\n"
+                    )
+                await utils.answer(message, self.strings("device_list").format(device_list_text.strip()))
+        else:
+            device_id = None
+            try:
+                device_number = int(args)
+                if 0 < device_number <= len(devices):
+                    device_id = devices[device_number - 1]["id"]
+                    device_name = devices[device_number - 1]["name"]
+                else:
+                    await utils.answer(message, self.strings("invalid_device_id"))
+                    return
+            except ValueError:
+                found_device = next((d for d in devices if d["id"] == args.strip()), None)
+                if found_device:
+                    device_id = found_device["id"]
+                    device_name = found_device["name"]
+                else:
+                    await utils.answer(message, self.strings("invalid_device_id"))
+                    return
 
-                self.sp.transfer_playback(device_id=device_id)
-                await utils.answer(message, self.strings("device_changed").format(device_name))
+            self.sp.transfer_playback(device_id=device_id)
+            await utils.answer(message, self.strings("device_changed").format(device_name))
             
     @error_handler
     @tokenized
@@ -1536,11 +1527,10 @@ class SpotifyMod(loader.Module):
                 blur=self.config["blur_intensity"],
             )
             
-            match self.config["banner_version"]:
-                case "vertical":
-                    file = banners.vertical()
-                case _:
-                    file = banners.horizontal()
+            if self.config["banner_version"] == "vertical":
+                file = banners.vertical()
+            else:
+                file = banners.horizontal()
             
             await utils.answer(tmp_msg, text, file=file)
         else:
@@ -1725,19 +1715,19 @@ class SpotifyMod(loader.Module):
                     await message.delete()
             return
 
-        match self.get("NextRefresh"):
-            case val if not val or val < time.time():
-                try:
-                    self.set(
-                        "acs_tkn",
-                        self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
-                    )
-                    self.set("NextRefresh", time.time() + 45 * 60)
-                    self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
-                except Exception as e:
-                    logger.error(f"Spotify watcher error: {e}")
-                    if "Refresh token revoked" in str(e):
-                        refresh_token = await self.invoke("stokrefresh", "", self.inline.bot.id)
-                        await refresh_token.delete()
-                    else:
-                        self.set("NextRefresh", time.time() + 300)
+        next_refresh = self.get("NextRefresh")
+        if not next_refresh or next_refresh < time.time():
+            try:
+                self.set(
+                    "acs_tkn",
+                    self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
+                )
+                self.set("NextRefresh", time.time() + 45 * 60)
+                self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
+            except Exception as e:
+                logger.error(f"Spotify watcher error: {e}")
+                if "Refresh token revoked" in str(e):
+                    refresh_token = await self.invoke("stokrefresh", "", self.inline.bot.id)
+                    await refresh_token.delete()
+                else:
+                    self.set("NextRefresh", time.time() + 300)
