@@ -25,7 +25,7 @@
 # requires: telethon spotipy pillow requests yt-dlp curl_cffi
 # scope: ffmpeg
 
-__version__ = ("d", "e", "v")
+__version__ = (1, 0)
 
 import asyncio
 import contextlib
