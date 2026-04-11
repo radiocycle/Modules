@@ -33,6 +33,7 @@ import functools
 import io
 import logging
 import re
+import shutil
 import textwrap
 import time
 import traceback
@@ -580,6 +581,44 @@ class SpotifyMod(loader.Module):
         )
         self._sp_store = {}
 
+    def _revoke_error(self, error: Exception) -> bool:
+        error_text = str(error).lower()
+        return "refresh token revoked" in error_text or "invalid_grant" in error_text
+
+    async def _refresh_spotify_token(self) -> bool:
+        token = self.get("acs_tkn") or {}
+        refresh_token = token.get("refresh_token")
+        if not refresh_token:
+            self.sp = None
+            logger.warning("Spotify token refresh skipped: no refresh token")
+            return False
+
+        try:
+            new_token = self.sp_auth.refresh_access_token(refresh_token)
+            if not new_token.get("refresh_token"):
+                new_token["refresh_token"] = refresh_token
+
+            self.set("acs_tkn", new_token)
+            self.set("NextRefresh", time.time() + 45 * 60)
+            self._init_spotify_client()
+            return bool(self.sp)
+        except Exception as e:
+            if self._revoke_error(e):
+                last_revoke_log = self.get("LastRevokeLog", 0)
+                now = time.time()
+                if now - last_revoke_log > 900:
+                    logger.error("Spotify refresh token revoked. Re-authenticate with .sauth")
+                    self.set("LastRevokeLog", now)
+
+                self.set("acs_tkn", None)
+                self.set("NextRefresh", now + 900)
+                self.sp = None
+                return False
+
+            logger.exception("Spotify token refresh failed")
+            self.set("NextRefresh", time.time() + 300)
+            return False
+
     def _init_spotify_client(self) -> bool:
         token = self.get("acs_tkn") or {}
         access_token = token.get("access_token")
@@ -754,6 +793,7 @@ class SpotifyMod(loader.Module):
         reply_to_id=None,
     ) -> bool:
         dl_dir = os.path.join(os.getcwd(), "spotifymod")
+        ytdlp_path = (self.config["ytdlp_path"] or "").strip() or "yt-dlp"
         if not os.path.exists(dl_dir):
             os.makedirs(dl_dir, exist_ok=True)
 
@@ -813,18 +853,27 @@ class SpotifyMod(loader.Module):
 
         try:
             squery = query.replace('"', '').replace("'", "")
-
             cookies = self.config["cookies_path"]
-            
+
+            resolved_ytdlp = shutil.which(ytdlp_path) if not os.path.dirname(ytdlp_path) else ytdlp_path
+            if not resolved_ytdlp or not os.path.exists(resolved_ytdlp):
+                logger.error(
+                    "Search download failed (%s): yt-dlp binary not found: %s",
+                    log_context or squery,
+                    ytdlp_path,
+                )
+                await send_text(self.strings("no_ytdlp").format(self.get_prefix()))
+                return False
+
             if cookies:
                 cmd = (
-                    f'{self.config["ytdlp_path"]} -x --impersonate="" --cookies {cookies} --audio-format mp3 --add-metadata '
+                    f'"{resolved_ytdlp}" -x --impersonate="" --cookies "{cookies}" --audio-format mp3 --add-metadata '
                     f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
                     f'"ytsearch1:{squery}"'
                 )
             else:
                 cmd = (
-                    f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
+                    f'"{resolved_ytdlp}" -x --impersonate="" --audio-format mp3 --add-metadata '
                     f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
                     f'"ytsearch1:{squery}"'
                 )
@@ -834,11 +883,21 @@ class SpotifyMod(loader.Module):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            _, stderr = await proc.communicate()
-            if proc.returncode and log_context:
-                err_text = stderr.decode(errors="ignore").strip() if stderr else ""
-                err_text = err_text[-400:] if err_text else "yt-dlp failed"
-                logger.error("Search download failed (%s): %s", log_context, err_text)
+            stdout, stderr = await proc.communicate()
+            stderr_text = stderr.decode(errors="ignore").strip() if stderr else ""
+            stdout_text = stdout.decode(errors="ignore").strip() if stdout else ""
+            combined_output = "\n".join(filter(None, [stderr_text, stdout_text])).strip()
+            if proc.returncode:
+                context = log_context or squery
+                err_text = combined_output[-1200:] if combined_output else "yt-dlp failed without output"
+                if "curl_cffi" in combined_output or "curl cffi" in combined_output:
+                    logger.error(
+                        "Search download failed (%s): missing/incompatible curl_cffi dependency: %s",
+                        context,
+                        err_text,
+                    )
+                else:
+                    logger.error("Search download failed (%s): %s", context, err_text)
 
             files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
 
@@ -856,8 +915,15 @@ class SpotifyMod(loader.Module):
                         )
                     await send_text(self.strings("dl_err"))
             else:
-                if log_context:
-                    logger.error("Search download produced no files (%s)", log_context)
+                context = log_context or squery
+                if combined_output:
+                    logger.error(
+                        "Search download produced no files (%s). yt-dlp output: %s",
+                        context,
+                        combined_output[-1200:],
+                    )
+                else:
+                    logger.error("Search download produced no files (%s)", context)
                 await send_text(self.strings("snowt_failed"))
 
         except Exception as e:
@@ -1436,13 +1502,14 @@ class SpotifyMod(loader.Module):
     )
     async def stokrefreshcmd(self, message: Message):
         """| .stokr - Refresh authorization token"""
-        self.set(
-            "acs_tkn",
-            self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
+        if await self._refresh_spotify_token():
+            await utils.answer(message, self.strings("authed"))
+            return
+
+        await utils.answer(
+            message,
+            self.strings("err").format("Refresh token is invalid. Re-authenticate with .sauth"),
         )
-        self.set("NextRefresh", time.time() + 45 * 60)
-        self._init_spotify_client()
-        await utils.answer(message, self.strings("authed"))
 
     @error_handler
     @tokenized
@@ -1717,17 +1784,4 @@ class SpotifyMod(loader.Module):
 
         next_refresh = self.get("NextRefresh")
         if not next_refresh or next_refresh < time.time():
-            try:
-                self.set(
-                    "acs_tkn",
-                    self.sp_auth.refresh_access_token(self.get("acs_tkn")["refresh_token"]),
-                )
-                self.set("NextRefresh", time.time() + 45 * 60)
-                self.sp = spotipy.Spotify(auth=self.get("acs_tkn")["access_token"])
-            except Exception as e:
-                logger.error(f"Spotify watcher error: {e}")
-                if "Refresh token revoked" in str(e):
-                    refresh_token = await self.invoke("stokrefresh", "", self.inline.bot.id)
-                    await refresh_token.delete()
-                else:
-                    self.set("NextRefresh", time.time() + 300)
+            await self._refresh_spotify_token()
