@@ -38,10 +38,10 @@ class UnbanAllMod(loader.Module):
         chat = await message.get_chat()
     
         if not chat.admin_rights and not chat.creator:
-            await utils.answer(message, self.strings("no_rights"))
+            await utils.answer(message, self.strings["no_rights"])
             return
 
-        await utils.answer(message, self.strings("unban_in_process"))
+        await utils.answer(message, self.strings["unban_in_process"])
 
         no_banned = True
 
@@ -59,11 +59,11 @@ class UnbanAllMod(loader.Module):
                 ))
                 
             except Exception as e:
-                await utils.answer(message, self.strings("error_occured").format(user.id, e))
+                await utils.answer(message, self.strings["error_occured"].format(user.id, e))
                 pass
 
         if no_banned:
-            await utils.answer(message, self.strings("no_banned"))
+            await utils.answer(message, self.strings["no_banned"])
             return
 
-        await utils.answer(message, self.strings("success"))
+        await utils.answer(message, self.strings["success"])

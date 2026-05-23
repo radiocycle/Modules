@@ -90,17 +90,17 @@ class PicToStoriesMod(loader.Module):
         args = utils.get_args_raw(message)
         reply = await message.get_reply_message()
         if not reply or not reply.media:
-            await utils.answer(message, self.strings("no_rep"))
+            await utils.answer(message, self.strings["no_rep"])
             return
 
         try:
             image_bytes = await reply.download_media(file=bytes)
             img = Image.open(io.BytesIO(image_bytes))
         except Exception as e:
-            await utils.answer(message, self.strings("err").format(e))
+            await utils.answer(message, self.strings["err"].format(e))
             return
 
-        await utils.answer(message, self.strings("work"))
+        await utils.answer(message, self.strings["work"])
 
         w, h = img.size
         curr_ratio = w / h
@@ -203,4 +203,4 @@ class PicToStoriesMod(loader.Module):
             )
         )
 
-        await utils.answer(message, self.strings("done"))
+        await utils.answer(message, self.strings["done"])

@@ -39,5 +39,5 @@ class NeofetchMod(loader.Module):
             await utils.answer(message, f"<pre>{utils.escape_html(output)}</pre>")
             
         except FileNotFoundError:
-            await utils.answer(message, self.strings("not_installed"))
+            await utils.answer(message, self.strings["not_installed"])
     

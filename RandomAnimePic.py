@@ -53,7 +53,7 @@ class RandomAnimePicMod(loader.Module):
     @loader.command(ru_doc="- получить рандомную аниме-картинку 👀")
     async def rapiccmd(self, message):
         """- fetch random anime-pic 👀"""
-        await utils.answer(message, self.strings("loading"))
+        await utils.answer(message, self.strings["loading"])
 
         try:
             category = await utils.get_args_raw().strip()
@@ -96,7 +96,7 @@ class RandomAnimePicMod(loader.Module):
             url, file = await asyncio.to_thread(fetch_image)
             await utils.answer(
                 message,
-                self.strings("img").format(url),
+                self.strings["img"].format(url),
                 file=file
             )
 
@@ -105,12 +105,12 @@ class RandomAnimePicMod(loader.Module):
                 "Error fetching random anime pic: %s",
                 traceback.format_exc(),
             )
-            await utils.answer(message, self.strings("error"))
+            await utils.answer(message, self.strings["error"])
 
     @loader.command(ru_doc="- получить список категорий из API 👀")
     async def racategoriescmd(self, message):
         """- fetch categories from api 👀"""
-        await utils.answer(message, self.strings("categories_loading"))
+        await utils.answer(message, self.strings["categories_loading"])
 
         try:
             def fetch_categories() -> list[str]:
@@ -147,7 +147,7 @@ class RandomAnimePicMod(loader.Module):
             categories = await asyncio.to_thread(fetch_categories)
 
             if not categories:
-                await utils.answer(message, self.strings("no_categories"))
+                await utils.answer(message, self.strings["no_categories"])
                 return
 
             formatted_categories = ", ".join(
@@ -155,7 +155,7 @@ class RandomAnimePicMod(loader.Module):
             )
             await utils.answer(
                 message,
-                self.strings("categories").format(formatted_categories),
+                self.strings["categories"].format(formatted_categories),
             )
 
         except Exception:
@@ -163,4 +163,4 @@ class RandomAnimePicMod(loader.Module):
                 "Error fetching categories: %s",
                 traceback.format_exc(),
             )
-            await utils.answer(message, self.strings("error"))
+            await utils.answer(message, self.strings["error"])
