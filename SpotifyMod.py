@@ -1187,7 +1187,7 @@ class SpotifyMod(loader.Module):
                 {
                     "title": self._short_text(track_name, limit=60),
                     "description": self._short_text(artists, limit=60) if artists else "",
-                    "message": f"{self.strings["downloading_track"].lstrip()}\n<i>spdl_{store_id}_{i}</i>",
+                    "message": f'{self.strings["downloading_track"].lstrip()}\n<i>spdl_{store_id}_{i}</i>',
                     "thumb": thumb,
                 }
             )
