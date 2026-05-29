@@ -507,19 +507,12 @@ class SpotifyMod(loader.Module):
             "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Invalid track number."
             " Please search first or provide a valid number from the list.</b>"
         ),
-        "device_list": (
-            "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Available devices:</b>\n{}"
-        ),
         "no_devices_found": (
             "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>No devices found.</b>"
         ),
         "device_changed": (
             "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playback transferred to"
             " {}.</b>"
-        ),
-        "invalid_device_id": (
-            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Invalid device ID."
-            " Use</b> <code>.sdevice</code> <b>to see available devices.</b>"
         ),
         "autobio": (
             "<tg-emoji emoji-id=6319076999105087378>🎧</tg-emoji> <b>Spotify autobio {}</b>"
@@ -537,6 +530,7 @@ class SpotifyMod(loader.Module):
         "playlist_created": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playlist {} created.</b>",
         "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playlist {} deleted.</b>",
         "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please specify a playlist name.</b>",
+        "device_select": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Select playback device:</b>",
     }
 
     strings_ru = {
@@ -636,19 +630,12 @@ class SpotifyMod(loader.Module):
             "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Некорректный номер трека."
             " Сначала выполните поиск или укажите правильный номер из списка.</b>"
         ),
-        "device_list": (
-            "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Доступные устройства:</b>\n{}"
-        ),
         "no_devices_found": (
             "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Устройства не найдены.</b>"
         ),
         "device_changed": (
             "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Воспроизведение переключено на"
             " {}.</b>"
-        ),
-        "invalid_device_id": (
-            "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Некорректный ID устройства."
-            " Используйте</b> <code>.sdevice</code> <b>, чтобы увидеть доступные устройства.</b>"
         ),
         "autobio": (
             "<tg-emoji emoji-id=6319076999105087378>🎧</tg-emoji> <b>Обновление био"
@@ -667,6 +654,7 @@ class SpotifyMod(loader.Module):
         "playlist_created": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Плейлист {} создан.</b>",
         "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Плейлист {} удален.</b>",
         "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
+        "device_select": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Выберите устройство для воспроизведения:</b>",
     }
 
     def __init__(self):
@@ -747,11 +735,10 @@ class SpotifyMod(loader.Module):
 
         try:
             self.sp = spotipy.Spotify(auth=access_token)
+            return True
         except Exception:
             self.sp = None
             return False
-
-        return True
 
     async def client_ready(self, client, db):
         self.font_ready = asyncio.Event()
@@ -786,8 +773,6 @@ class SpotifyMod(loader.Module):
                 return await func(*args, **kwargs)
             except Exception as e:
                 error_msg = str(e)
-                logger.error(f"Error in {func.__name__}: {error_msg}")
-                
                 if "NO_ACTIVE_DEVICE" in error_msg:
                     user_error = "No active device"
                 elif "PREMIUM_REQUIRED" in error_msg:
@@ -855,8 +840,8 @@ class SpotifyMod(loader.Module):
                     await asyncio.sleep(getattr(e, "seconds", 30) + 1)
                 except asyncio.CancelledError:
                     break
-                except Exception as e:
-                    logger.exception("autobio error: %s", e)
+                except Exception:
+                    pass
     
                 await asyncio.sleep(self.config.get("BIO_UPDATE_DELAY", 30))
 
@@ -912,20 +897,17 @@ class SpotifyMod(loader.Module):
         reply_to_id=None,
     ) -> bool:
         dl_dir = os.path.join(os.getcwd(), "spotifymod")
-        if not os.path.exists(dl_dir):
-            os.makedirs(dl_dir, exist_ok=True)
+        os.makedirs(dl_dir, exist_ok=True)
 
         for f in os.listdir(dl_dir):
-            try:
+            with contextlib.suppress(Exception):
                 os.remove(os.path.join(dl_dir, f))
-            except Exception:
-                pass
 
-        success = False
         if caption is None:
-            safe_track = utils.escape_html(track_name or "Unknown")
-            safe_artists = utils.escape_html(artists or "Unknown Artist")
-            caption = self.strings["download_success"].format(safe_track, safe_artists)
+            caption = self.strings["download_success"].format(
+                utils.escape_html(track_name or "Unknown"),
+                utils.escape_html(artists or "Unknown Artist"),
+            )
 
         async def send_text(text: str) -> bool:
             if target is None:
@@ -947,91 +929,60 @@ class SpotifyMod(loader.Module):
             if target is None:
                 return False
             if isinstance(target, int):
-                await self._client.send_file(
-                    target,
-                    file_path,
-                    caption=caption,
-                    reply_to=reply_to_id,
-                )
+                await self._client.send_file(target, file_path, caption=caption, reply_to=reply_to_id)
                 return True
             try:
                 await utils.answer(target, caption, file=file_path)
                 return True
-            except Exception:
+            except Exception as e:
+                logger.error("SpotifyMod send_file fallback: %s", e, exc_info=True)
                 chat_id = self._get_chat_id(target)
                 if chat_id is None:
                     return False
-                await self._client.send_file(
-                    chat_id,
-                    file_path,
-                    caption=caption,
-                    reply_to=reply_to_id,
-                )
+                await self._client.send_file(chat_id, file_path, caption=caption, reply_to=reply_to_id)
                 return True
 
+        success = False
         try:
             squery = query.replace('"', '').replace("'", "")
-
             cookies = self.config["cookies_path"]
-            
-            if cookies:
-                cmd = (
-                    f'{self.config["ytdlp_path"]} -x --impersonate="" --cookies {cookies} --audio-format mp3 --add-metadata '
-                    f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
-                    f'"ytsearch1:{squery}"'
-                )
-            else:
-                cmd = (
-                    f'{self.config["ytdlp_path"]} -x --impersonate="" --audio-format mp3 --add-metadata '
-                    f'--audio-quality 0 -o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
-                    f'"ytsearch1:{squery}"'
-                )
+            ytdlp_flags = '-x --audio-format mp3 --audio-quality 0 --add-metadata --format "bestaudio/best" --no-playlist'
+            cookies_flag = f"--cookies {cookies} " if cookies else ""
+            cmd = (
+                f'{self.config["ytdlp_path"]} {ytdlp_flags} {cookies_flag}'
+                f'-o "{dl_dir}/%(title)s [%(id)s].%(ext)s" '
+                f'"ytsearch1:{squery}"'
+            )
 
             proc = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             _, stderr = await proc.communicate()
-            if proc.returncode and log_context:
-                err_text = stderr.decode(errors="ignore").strip() if stderr else ""
-                err_text = err_text[-400:] if err_text else "yt-dlp failed"
-                logger.error("Search download failed (%s): %s", log_context, err_text)
+
+            if proc.returncode:
+                err_text = stderr.decode(errors="ignore").strip() if stderr else "yt-dlp failed"
+                logger.error("SpotifyMod: yt-dlp code %s for %r: %s", proc.returncode, log_context or query, err_text[-400:])
 
             files = [f for f in os.listdir(dl_dir) if f.endswith(".mp3")]
-
             if files:
-                first = files[0]
-                target_file = os.path.join(dl_dir, first)
-                success = await send_file(target_file)
+                success = await send_file(os.path.join(dl_dir, files[0]))
                 if not success:
-                    if log_context:
-                        logger.error(
-                            "Search download send failed (%s). target=%s chat_id=%s",
-                            log_context,
-                            type(target).__name__,
-                            self._get_chat_id(target),
-                        )
+                    logger.error("SpotifyMod: failed to send %r (target=%s)", log_context or query, type(target).__name__)
                     await send_text(self.strings["dl_err"])
             else:
-                if log_context:
-                    logger.error("Search download produced no files (%s)", log_context)
+                logger.error("SpotifyMod: yt-dlp produced no mp3 for %r", log_context or query)
                 await send_text(self.strings["snowt_failed"])
 
         except Exception as e:
-            if log_context:
-                logger.exception("Search download error (%s)", log_context)
-            else:
-                logger.error(e)
+            logger.error("Download track error (%s): %s", log_context or "no context", e, exc_info=True)
             await send_text(self.strings["dl_err"])
 
         finally:
-            if os.path.exists(dl_dir):
-                for f in os.listdir(dl_dir):
-                    try:
-                        os.remove(os.path.join(dl_dir, f))
-                    except Exception:
-                        pass
+            for f in os.listdir(dl_dir):
+                with contextlib.suppress(Exception):
+                    os.remove(os.path.join(dl_dir, f))
 
         return success
 
@@ -1109,7 +1060,7 @@ class SpotifyMod(loader.Module):
             chat_id = self._get_chat_id(call)
 
         if chat_id is None and target_message is None:
-            logger.error("Inline download missing chat_id (%s - %s)", track_name, artists)
+            pass
             with contextlib.suppress(Exception):
                 await call.edit(self.strings["dl_err"], reply_markup=None)
             return
@@ -1413,49 +1364,48 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc=(
-            "| .sd - 🎵 Выбрать устройство для воспроизведения. Например: .sdevice <ID устройства>или .sdevice | .sd для вывода списка устройств"
-        ),
+        ru_doc="| .sd - 🎵 Выбрать устройство для воспроизведения",
         alias="sd"
     )
     async def sdevicecmd(self, message: Message):
-        """| .sd - 🎵 Set preferred playback device. Usage: .sdevice <device_id> or .sdevice | .sd to list devices"""
-        args = utils.get_args_raw(message)
+        """| .sd - 🎵 Select playback device"""
         devices = self.sp.devices()["devices"]
+        if not devices:
+            await utils.answer(message, self.strings["no_devices_found"])
+            return
 
-        if args == "":
-            if not devices:
-                await utils.answer(message, self.strings["no_devices_found"])
-            else:
-                device_list_text = ""
-                for i, device in enumerate(devices):
-                    is_active = "(active)" if device["is_active"] else ""
-                    device_list_text += (
-                        f"<b>{i+1}.</b> {device['name']}"
-                        f" ({device['type']}) {is_active}\n"
-                    )
-                await utils.answer(message, self.strings["device_list"].format(device_list_text.strip()))
-        else:
-            device_id = None
+        async def _switch(call, device_id: str, device_name: str):
+            with contextlib.suppress(Exception):
+                await call.answer()
             try:
-                device_number = int(args)
-                if 0 < device_number <= len(devices):
-                    device_id = devices[device_number - 1]["id"]
-                    device_name = devices[device_number - 1]["name"]
-                else:
-                    await utils.answer(message, self.strings["invalid_device_id"])
-                    return
-            except ValueError:
-                found_device = next((d for d in devices if d["id"] == args.strip()), None)
-                if found_device:
-                    device_id = found_device["id"]
-                    device_name = found_device["name"]
-                else:
-                    await utils.answer(message, self.strings["invalid_device_id"])
-                    return
+                self.sp.transfer_playback(device_id=device_id)
+                with contextlib.suppress(Exception):
+                    await call.edit(
+                        self.strings["device_changed"].format(utils.escape_html(device_name)),
+                        reply_markup=None,
+                    )
+            except Exception as e:
+                with contextlib.suppress(Exception):
+                    await call.edit(
+                        self.strings["err"].format(utils.escape_html(str(e)[:80])),
+                        reply_markup=None,
+                    )
 
-            self.sp.transfer_playback(device_id=device_id)
-            await utils.answer(message, self.strings["device_changed"].format(device_name))
+        keyboard = []
+        for device in devices:
+            active_mark = "> " if device["is_active"] else ""
+            label = f"{active_mark}{device['name']} ({device['type'].lower()})"
+            keyboard.append([{
+                "text": label,
+                "callback": _switch,
+                "args": (device["id"], device["name"]),
+            }])
+
+        await self.inline.form(
+            self.strings["device_select"],
+            message=message,
+            reply_markup=keyboard,
+        )
             
     @error_handler
     @tokenized
@@ -1767,8 +1717,15 @@ class SpotifyMod(loader.Module):
         text = self.config["custom_text"].format(**data)
 
         msg = await utils.answer(message, text + self.strings["downloading_track"])
-        
-        await self._download_track(msg, f"{artists} {track}", caption=text)
+
+        await self._download_track(
+            msg,
+            f"{artists} {track}",
+            caption=text,
+            track_name=track,
+            artists=artists,
+            log_context=f"{track} - {artists}",
+        )
 
     @error_handler
     @tokenized
@@ -1890,9 +1847,11 @@ class SpotifyMod(loader.Module):
                 self.set("NextRefresh", time.time() + 45 * 60)
                 if new_token and new_token.get("access_token"):
                     self.sp = spotipy.Spotify(auth=new_token["access_token"])
+                    logger.debug("Token refreshed successfully")
             except Exception as e:
-                logger.error(f"Spotify watcher error: {e}")
+                logger.error("Token refresh error: %s", e, exc_info=True)
                 if "Refresh token revoked" in str(e):
+                    logger.warning("Refresh token revoked, re-authenticating")
                     refresh_token = await self.invoke("stokrefresh", "", self.inline.bot.id)
                     await refresh_token.delete()
                 else:
