@@ -946,7 +946,7 @@ class SpotifyMod(loader.Module):
         try:
             squery = query.replace('"', '').replace("'", "")
             cookies = self.config["cookies_path"]
-            ytdlp_flags = '-x --audio-format mp3 --audio-quality 0 --add-metadata --format "bestaudio/best" --no-playlist'
+            ytdlp_flags = '-x --impersonate="" --audio-format mp3 --audio-quality 0 --add-metadata --format "bestaudio/best" --no-playlist'
             cookies_flag = f"--cookies {cookies} " if cookies else ""
             cmd = (
                 f'{self.config["ytdlp_path"]} {ytdlp_flags} {cookies_flag}'
