@@ -532,6 +532,12 @@ class SpotifyMod(loader.Module):
         "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Playlist {} deleted.</b>",
         "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Please specify a playlist name.</b>",
         "device_select": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Select playback device:</b>",
+        "on-shuffle": (
+            "<tg-emoji emoji-id=5267246517701352801>🔀</tg-emoji> <b>Shuffle enabled.</b>"
+        ),
+        "off-shuffle": (
+            "<tg-emoji emoji-id=5265105218806259720>🔀</tg-emoji> <b>Shuffle disabled.</b>"
+        ),
     }
 
     strings_ru = {
@@ -656,6 +662,12 @@ class SpotifyMod(loader.Module):
         "playlist_deleted": "<tg-emoji emoji-id=5776375003280838798>✅</tg-emoji> <b>Плейлист {} удален.</b>",
         "no_playlist_name": "<tg-emoji emoji-id=5778527486270770928>❌</tg-emoji> <b>Пожалуйста, укажите название плейлиста.</b>",
         "device_select": "<tg-emoji emoji-id=5956561916573782596>📄</tg-emoji> <b>Выберите устройство для воспроизведения:</b>",
+        "on-shuffle": (
+            "<tg-emoji emoji-id=5267246517701352801>🔀</tg-emoji> <b>Перемешивание включено.</b>"
+        ),
+        "off-shuffle": (
+            "<tg-emoji emoji-id=5265105218806259720>🔀</tg-emoji> <b>Перемешивание отключено.</b>"
+        ),
     }
 
     def __init__(self):
@@ -1162,11 +1174,6 @@ class SpotifyMod(loader.Module):
         """<query> - search Spotify track"""
         return await self._inline_search_tracks(query)
 
-    @loader.inline_handler(ru_doc="<запрос> - поиск треков Spotify.")
-    async def ssearch(self, query):
-        """<query> - search Spotify track"""
-        return await self._inline_search_tracks(query)
-                         
     @error_handler
     @tokenized
     @loader.command(
@@ -1438,6 +1445,26 @@ class SpotifyMod(loader.Module):
         """- ✋ Stop repeat"""
         self.sp.repeat("context")
         await utils.answer(message, self.strings["off-repeat"])
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🔀 Включить перемешивание"
+    )
+    async def sshufflecmd(self, message: Message):
+        """- 🔀 Enable shuffle"""
+        self.sp.shuffle(True)
+        await utils.answer(message, self.strings["on-shuffle"])
+
+    @error_handler
+    @tokenized
+    @loader.command(
+        ru_doc="- 🔀 Отключить перемешивание"
+    )
+    async def sdeshufflecmd(self, message: Message):
+        """- 🔀 Disable shuffle"""
+        self.sp.shuffle(False)
+        await utils.answer(message, self.strings["off-shuffle"])
 
     @error_handler
     @tokenized
@@ -1742,11 +1769,10 @@ class SpotifyMod(loader.Module):
     @error_handler
     @tokenized
     @loader.command(
-        ru_doc="| .sq - 🔍 Поиск треков.",
-        alias="sq"
+        ru_doc="- 🔍 Поиск треков."
     )
-    async def ssearchcmd(self, message: Message):
-        """| .sq - 🔍 Search for tracks."""
+    async def sqcmd(self, message: Message):
+        """- 🔍 Search for tracks."""
         args = utils.get_args_raw(message)
         if not args:
             await utils.answer(message, self.strings["no_search_query"])
