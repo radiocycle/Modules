@@ -105,6 +105,8 @@ class PicToStoriesMod(loader.Module):
         try:
             image_bytes = await reply.download_media(file=bytes)
             img = Image.open(io.BytesIO(image_bytes))
+            if img.mode != "RGB":
+                img = img.convert("RGB")
         except Exception as e:
             await utils.answer(message, self.strings["err"].format(e))
             return
